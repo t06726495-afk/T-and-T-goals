@@ -1,7 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { GOAL_EMOJI_CHOICES, COLOR_CHOICES, DIFFICULTY_OPTIONS } from '../lib/pickers'
+import {
+  GOAL_EMOJI_CHOICES,
+  COLOR_CHOICES,
+  DIFFICULTY_OPTIONS,
+  UNIT_PRESETS,
+  TITLE_PLACEHOLDER,
+} from '../lib/pickers'
 import type { Difficulty, Goal, GoalKind, Visibility } from '../lib/types'
 
 interface GoalFormSheetProps {
@@ -10,21 +16,54 @@ interface GoalFormSheetProps {
   onSaved: () => void
 }
 
+function preventEnterSubmit(e: React.KeyboardEvent) {
+  if (e.key === 'Enter') e.preventDefault()
+}
+
+const inputClass =
+  'mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink focus:border-mine focus:outline-none'
+
 export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
   const { profile, coupleId } = useAuth()
   const isEdit = Boolean(goal)
 
   const [title, setTitle] = useState(goal?.title ?? '')
   const [emoji, setEmoji] = useState(goal?.emoji ?? GOAL_EMOJI_CHOICES[0])
+  const [customEmojiMode, setCustomEmojiMode] = useState(false)
   const [color, setColor] = useState(goal?.color ?? profile?.accent_color ?? COLOR_CHOICES[0])
   const [kind, setKind] = useState<GoalKind>(goal?.kind ?? 'checkbox')
   const [target, setTarget] = useState(goal?.target_per_day?.toString() ?? '10')
-  const [unit, setUnit] = useState(goal?.unit ?? '')
+  const [unit, setUnit] = useState(goal?.unit ?? UNIT_PRESETS[0])
+  const [customUnitMode, setCustomUnitMode] = useState(
+    Boolean(goal?.unit) && !UNIT_PRESETS.includes(goal?.unit ?? ''),
+  )
   const [difficulty, setDifficulty] = useState<Difficulty>(goal?.difficulty ?? 'easy')
   const [category, setCategory] = useState(goal?.category ?? '')
   const [visibility, setVisibility] = useState<Visibility>(goal?.visibility ?? 'private')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Swipe-down-to-dismiss on the handle bar only, so it doesn't fight with
+  // scrolling the form content.
+  const [dragY, setDragY] = useState(0)
+  const dragStartY = useRef<number | null>(null)
+
+  function onHandleTouchStart(e: React.TouchEvent) {
+    dragStartY.current = e.touches[0].clientY
+  }
+  function onHandleTouchMove(e: React.TouchEvent) {
+    if (dragStartY.current === null) return
+    const delta = e.touches[0].clientY - dragStartY.current
+    if (delta > 0) setDragY(delta)
+  }
+  function onHandleTouchEnd() {
+    if (dragY > 80) {
+      onClose()
+    } else {
+      setDragY(0)
+    }
+    dragStartY.current = null
+  }
 
   async function ensureDailyTemplate(goalId: string, goalTitle: string) {
     const { data: existing } = await supabase
@@ -125,8 +164,21 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 sm:items-center">
-      <div className="safe-bottom max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl">
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border sm:hidden" />
+      <div
+        className="safe-bottom max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl"
+        style={{
+          transform: `translateY(${dragY}px)`,
+          transition: dragY === 0 ? 'transform 0.2s' : 'none',
+        }}
+      >
+        <div
+          className="mx-auto -mt-1 mb-2 h-8 w-16 touch-none sm:hidden"
+          onTouchStart={onHandleTouchStart}
+          onTouchMove={onHandleTouchMove}
+          onTouchEnd={onHandleTouchEnd}
+        >
+          <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-border" />
+        </div>
         <h2 className="text-lg font-semibold text-ink">{isEdit ? 'Edit goal' : 'New goal'}</h2>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
@@ -136,7 +188,9 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+              onKeyDown={preventEnterSubmit}
+              placeholder={TITLE_PLACEHOLDER}
+              className={inputClass}
             />
           </label>
 
@@ -147,15 +201,39 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
                 <button
                   key={e}
                   type="button"
-                  onClick={() => setEmoji(e)}
+                  onClick={() => {
+                    setEmoji(e)
+                    setCustomEmojiMode(false)
+                  }}
                   className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                    emoji === e ? 'border-mine bg-mine/10' : 'border-border bg-surface-raised'
+                    !customEmojiMode && emoji === e
+                      ? 'border-mine bg-mine/10'
+                      : 'border-border bg-surface-raised'
                   }`}
                 >
                   {e}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setCustomEmojiMode(true)}
+                className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
+                  customEmojiMode ? 'border-mine bg-mine/10 text-mine' : 'border-border bg-surface-raised text-ink-dim'
+                }`}
+              >
+                +
+              </button>
             </div>
+            {customEmojiMode && (
+              <input
+                autoFocus
+                value={emoji}
+                onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+                onKeyDown={preventEnterSubmit}
+                placeholder="Paste or type any emoji"
+                className={`${inputClass} mt-2 text-center text-2xl`}
+              />
+            )}
           </div>
 
           <div>
@@ -171,6 +249,13 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
                   style={{ backgroundColor: c, borderColor: color === c ? '#f4f4f6' : 'transparent' }}
                 />
               ))}
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-11 w-11 rounded-xl border border-border bg-surface-raised"
+                aria-label="Custom color"
+              />
             </div>
           </div>
 
@@ -208,17 +293,42 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
                   min={1}
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+                  onKeyDown={preventEnterSubmit}
+                  className={inputClass}
                 />
               </label>
               <label className="block flex-1 text-sm text-ink-dim">
                 Unit
-                <input
-                  placeholder="glasses"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
-                />
+                <select
+                  value={customUnitMode ? '__custom__' : unit}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setCustomUnitMode(true)
+                      setUnit('')
+                    } else {
+                      setCustomUnitMode(false)
+                      setUnit(e.target.value)
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  {UNIT_PRESETS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                  <option value="__custom__">Custom…</option>
+                </select>
+                {customUnitMode && (
+                  <input
+                    autoFocus
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    onKeyDown={preventEnterSubmit}
+                    placeholder="type a unit"
+                    className={`${inputClass} mt-2`}
+                  />
+                )}
               </label>
             </div>
           )}
@@ -228,14 +338,17 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-              className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+              className={inputClass}
             >
               {DIFFICULTY_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>
-                  {d.label}
+                  {d.label} — {d.points} pt{d.points === 1 ? '' : 's'}
                 </option>
               ))}
             </select>
+            <span className="mt-1 block text-xs text-ink-dim">
+              Point values are being tuned further in a later phase.
+            </span>
           </label>
 
           <label className="block text-sm text-ink-dim">
@@ -244,7 +357,8 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
               placeholder="Health, Home, Work…"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+              onKeyDown={preventEnterSubmit}
+              className={inputClass}
             />
           </label>
 

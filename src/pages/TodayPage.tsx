@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { ensureTodaysTasks } from '../lib/recurrence'
 import { timeOfDayLabel } from '../lib/date'
 import { InstallStatus } from '../components/InstallStatus'
+import { Confetti } from '../components/Confetti'
 import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
@@ -22,6 +23,9 @@ export function TodayPage() {
   const [partnerDone, setPartnerDone] = useState(0)
   const [partnerTotal, setPartnerTotal] = useState(0)
   const [flash, setFlash] = useState<{ id: string; points: number } | null>(null)
+  const [celebrating, setCelebrating] = useState<string | null>(null)
+  const [editingCount, setEditingCount] = useState<string | null>(null)
+  const [editingCountValue, setEditingCountValue] = useState('')
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -110,6 +114,8 @@ export function TodayPage() {
 
     if (nextDone) {
       if (navigator.vibrate) navigator.vibrate(15)
+      setCelebrating(task.id)
+      setTimeout(() => setCelebrating(null), 650)
     }
 
     const { data: updated, error } = await supabase
@@ -148,24 +154,29 @@ export function TodayPage() {
     }
   }
 
-  async function adjustCounter(goal: Goal, delta: number) {
+  async function commitCounter(goal: Goal, nextCount: number) {
     const existing = counterLogs.get(goal.id)
-    const nextCount = Math.max(0, (existing?.count ?? 0) + delta)
-    const nextCompleted = nextCount >= (goal.target_per_day ?? 1)
-
-    if (delta > 0 && navigator.vibrate) navigator.vibrate(10)
+    const clamped = Math.max(0, nextCount)
+    const target = goal.target_per_day ?? 1
+    const nextCompleted = clamped >= target
+    const justHitTarget = nextCompleted && !(existing?.completed ?? false)
 
     const optimistic: GoalLog = {
       id: existing?.id ?? 'pending',
       goal_id: goal.id,
       owner_id: profile!.id,
       log_date: today,
-      count: nextCount,
+      count: clamped,
       completed: nextCompleted,
       points_awarded: existing?.points_awarded ?? 0,
       created_at: existing?.created_at ?? new Date().toISOString(),
     }
     setCounterLogs((prev) => new Map(prev).set(goal.id, optimistic))
+
+    if (justHitTarget) {
+      setCelebrating(goal.id)
+      setTimeout(() => setCelebrating(null), 650)
+    }
 
     const { data: updated, error } = await supabase
       .from('goal_logs')
@@ -174,7 +185,7 @@ export function TodayPage() {
           goal_id: goal.id,
           owner_id: profile!.id,
           log_date: today,
-          count: nextCount,
+          count: clamped,
           completed: nextCompleted,
         },
         { onConflict: 'goal_id,log_date' },
@@ -188,9 +199,29 @@ export function TodayPage() {
 
     const prevPoints = existing?.points_awarded ?? 0
     const newPoints = (updated as GoalLog).points_awarded
-    if (delta > 0 && newPoints > prevPoints) {
+    if (newPoints > prevPoints) {
       setFlash({ id: goal.id, points: newPoints - prevPoints })
       setTimeout(() => setFlash(null), 1200)
+    }
+  }
+
+  async function adjustCounter(goal: Goal, delta: number) {
+    if (delta > 0 && navigator.vibrate) navigator.vibrate(10)
+    const existing = counterLogs.get(goal.id)
+    await commitCounter(goal, (existing?.count ?? 0) + delta)
+  }
+
+  function startEditingCount(goal: Goal) {
+    const existing = counterLogs.get(goal.id)
+    setEditingCount(goal.id)
+    setEditingCountValue((existing?.count ?? 0).toString())
+  }
+
+  async function commitEditingCount(goal: Goal) {
+    const value = Number(editingCountValue)
+    setEditingCount(null)
+    if (Number.isFinite(value)) {
+      await commitCounter(goal, Math.round(value))
     }
   }
 
@@ -259,12 +290,43 @@ export function TodayPage() {
                 key={goal.id}
                 className="relative flex items-center gap-3 rounded-2xl border border-border bg-surface p-3"
               >
-                <span className="text-xl">{goal.emoji}</span>
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl"
+                  style={{ backgroundColor: `${goal.color}26` }}
+                >
+                  {goal.emoji}
+                </span>
                 <div className="flex-1">
                   <p className="font-medium text-ink">{goal.title}</p>
-                  <p className="text-sm text-ink-dim">
-                    {count} / {target} {goal.unit ?? ''}
-                  </p>
+                  {editingCount === goal.id ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        autoFocus
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={editingCountValue}
+                        onChange={(e) => setEditingCountValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void commitEditingCount(goal)
+                          }
+                        }}
+                        onBlur={() => void commitEditingCount(goal)}
+                        className="h-9 w-20 rounded-lg border border-border bg-surface-raised px-2 text-base text-ink focus:border-mine focus:outline-none"
+                      />
+                      <span className="text-sm text-ink-dim">/ {target} {goal.unit ?? ''}</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditingCount(goal)}
+                      className="text-sm text-ink-dim underline decoration-dotted underline-offset-2"
+                    >
+                      {count} / {target} {goal.unit ?? ''}
+                    </button>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -282,6 +344,7 @@ export function TodayPage() {
                 >
                   +1
                 </button>
+                {celebrating === goal.id && <Confetti />}
                 {flash?.id === goal.id && (
                   <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
                     +{flash.points}
@@ -309,13 +372,14 @@ export function TodayPage() {
                   <span
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${
                       task.done ? 'border-mine bg-mine text-bg' : 'border-border'
-                    }`}
+                    } ${celebrating === task.id ? 'animate-check-pop' : ''}`}
                   >
                     {task.done && '✓'}
                   </span>
                   <span className={`flex-1 ${task.done ? 'text-ink-dim line-through' : 'text-ink'}`}>
                     {task.title}
                   </span>
+                  {celebrating === task.id && <Confetti />}
                 </button>
                 {flash?.id === task.id && (
                   <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">

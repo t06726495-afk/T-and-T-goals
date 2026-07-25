@@ -69,7 +69,8 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
         <input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+          onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink focus:border-mine focus:outline-none"
         />
       </label>
 
@@ -122,7 +123,8 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
         <input
           value={timezone}
           onChange={(e) => setTimezone(e.target.value)}
-          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
+          onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink focus:border-mine focus:outline-none"
         />
       </label>
 

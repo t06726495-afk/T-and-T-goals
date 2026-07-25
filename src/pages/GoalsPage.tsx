@@ -120,7 +120,6 @@ export function GoalsPage() {
               goal={goal}
               today={today}
               completedDates={logsByGoal.get(goal.id) ?? new Set()}
-              accentClass="mine"
               onClick={() => setEditingGoal(goal)}
             />
           ))}
@@ -139,7 +138,6 @@ export function GoalsPage() {
                 goal={goal}
                 today={today}
                 completedDates={logsByGoal.get(goal.id) ?? new Set()}
-                accentClass="partner"
                 readOnly
               />
             ))}
@@ -165,14 +163,12 @@ function GoalCard({
   goal,
   today,
   completedDates,
-  accentClass,
   readOnly,
   onClick,
 }: {
   goal: Goal
   today: string
   completedDates: Set<string>
-  accentClass: 'mine' | 'partner'
   readOnly?: boolean
   onClick?: () => void
 }) {
@@ -184,12 +180,16 @@ function GoalCard({
       type="button"
       onClick={onClick}
       disabled={readOnly}
-      className={`w-full rounded-2xl border p-4 text-left ${
-        accentClass === 'mine' ? 'border-mine/20' : 'border-partner/20'
-      } bg-surface ${readOnly ? '' : 'active:scale-[0.99]'}`}
+      className={`w-full rounded-2xl border bg-surface p-4 text-left ${readOnly ? '' : 'active:scale-[0.99]'}`}
+      style={{ borderColor: `${goal.color}40` }}
     >
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{goal.emoji}</span>
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl"
+          style={{ backgroundColor: `${goal.color}26` }}
+        >
+          {goal.emoji}
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-ink">{goal.title}</p>
           <p className="text-xs text-ink-dim">
