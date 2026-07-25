@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ensureTodaysTasks } from '../lib/recurrence'
 import { timeOfDayLabel } from '../lib/date'
+import { levelProgress } from '../lib/levels'
 import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
 import { AnimatedCheck } from '../components/AnimatedCheck'
@@ -12,7 +13,7 @@ import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
 
 export function TodayPage() {
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const navigate = useNavigate()
 
   const [today, setToday] = useState('')
@@ -103,7 +104,11 @@ export function TodayPage() {
     }
 
     setLoading(false)
-  }, [profile])
+    // Depend on the specific fields used, not the profile object: completing
+    // a task calls refreshProfile(), which hands back a new object reference
+    // every time, and that would re-run this whole day load on every tap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, profile?.timezone])
 
   useEffect(() => {
     void load()
@@ -153,6 +158,10 @@ export function TodayPage() {
         { onConflict: 'goal_id,log_date' },
       )
     }
+
+    // Pull the server-updated points_total/current_level so the level bar
+    // in the header moves as you complete things.
+    await refreshProfile()
   }
 
   async function commitCounter(goal: Goal, nextCount: number) {
@@ -204,6 +213,8 @@ export function TodayPage() {
       setFlash({ id: goal.id, points: newPoints - prevPoints })
       setTimeout(() => setFlash(null), 1200)
     }
+
+    await refreshProfile()
   }
 
   async function adjustCounter(goal: Goal, delta: number) {
@@ -243,8 +254,8 @@ export function TodayPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold text-ink">
             {new Date(`${today}T00:00:00`).toLocaleDateString(undefined, {
               weekday: 'long',
@@ -254,6 +265,23 @@ export function TodayPage() {
           </h1>
           <p className="mt-1 text-mine">{pointsToday} points today</p>
         </div>
+        <button
+          type="button"
+          onClick={() => navigate('/points')}
+          className="shrink-0 text-right"
+          aria-label="View points"
+        >
+          <p className="text-[10px] uppercase tracking-wide text-ink-dim">Level</p>
+          <p className="text-2xl font-bold leading-none text-mine">{profile.current_level}</p>
+          <div className="mt-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-surface-raised">
+            <div
+              className="h-full rounded-full bg-mine transition-all duration-500"
+              style={{
+                width: `${levelProgress(profile.points_total, profile.current_level).fraction * 100}%`,
+              }}
+            />
+          </div>
+        </button>
       </div>
 
       {partner && (

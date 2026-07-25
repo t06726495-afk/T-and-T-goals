@@ -74,7 +74,8 @@ export function GoalsPage() {
     }
 
     setLoading(false)
-  }, [profile])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   useEffect(() => {
     void load()

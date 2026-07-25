@@ -249,6 +249,23 @@ This one also does a one-time backfill of `profiles.points_total` /
 you've done in earlier phases gets reflected immediately instead of starting
 from zero.
 
+## 13. Run the points-stats migration
+
+Adds the history + summary functions behind the graph, badges, and records
+on the Points screen.
+
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy the contents of `supabase/migrations/20260728000000_points_stats.sql`
+   from the repo and paste it in.
+3. Click **Run**. Should say "Success."
+
+**Run step 12 first** — this migration builds on the triggers that one
+creates. It also re-runs the totals resync at the end, so if points ever
+look wrong or stuck at zero, re-running just this file is the repair hatch.
+
+> If the Points screen shows "Points stats are unavailable," it means this
+> migration hasn't been run yet.
+
 ## What's next
 
 Phase 6 adds push notifications, nudges, and the GitHub Actions cron job for
