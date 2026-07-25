@@ -2,7 +2,7 @@
 // cards. Takes a set of YYYY-MM-DD strings that count as "done" for a goal
 // and the timezone-correct value of "today".
 
-function shiftDate(dateStr: string, days: number): string {
+export function shiftDate(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))
   dt.setUTCDate(dt.getUTCDate() + days)

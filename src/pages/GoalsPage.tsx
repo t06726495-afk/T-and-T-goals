@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { todayInTimezone } from '../lib/date'
 import { currentStreak, lastSevenDays } from '../lib/streak'
 import { GoalFormSheet } from '../components/GoalFormSheet'
+import { YearGridModal } from '../components/YearGridModal'
 import type { Goal, GoalLog, Profile } from '../lib/types'
 
 const STREAK_LOOKBACK_DAYS = 60
@@ -16,6 +17,7 @@ export function GoalsPage() {
   const [logsByGoal, setLogsByGoal] = useState<Map<string, Set<string>>>(new Map())
   const [loading, setLoading] = useState(true)
   const [editingGoal, setEditingGoal] = useState<Goal | 'new' | null>(null)
+  const [viewingGoal, setViewingGoal] = useState<Goal | null>(null)
 
   const today = profile ? todayInTimezone(profile.timezone) : new Date().toISOString().slice(0, 10)
 
@@ -120,7 +122,8 @@ export function GoalsPage() {
               goal={goal}
               today={today}
               completedDates={logsByGoal.get(goal.id) ?? new Set()}
-              onClick={() => setEditingGoal(goal)}
+              onClick={() => setViewingGoal(goal)}
+              onEdit={() => setEditingGoal(goal)}
             />
           ))}
         </div>
@@ -139,6 +142,7 @@ export function GoalsPage() {
                 today={today}
                 completedDates={logsByGoal.get(goal.id) ?? new Set()}
                 readOnly
+                onClick={() => setViewingGoal(goal)}
               />
             ))}
           </div>
@@ -155,6 +159,17 @@ export function GoalsPage() {
           }}
         />
       )}
+
+      {viewingGoal && (
+        <YearGridModal
+          goal={viewingGoal}
+          readOnly={viewingGoal.owner_id !== profile.id}
+          onClose={() => {
+            setViewingGoal(null)
+            void load()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -165,39 +180,53 @@ function GoalCard({
   completedDates,
   readOnly,
   onClick,
+  onEdit,
 }: {
   goal: Goal
   today: string
   completedDates: Set<string>
   readOnly?: boolean
   onClick?: () => void
+  onEdit?: () => void
 }) {
   const streak = currentStreak(completedDates, today)
   const week = lastSevenDays(completedDates, today)
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={readOnly}
-      className={`w-full rounded-2xl border bg-surface p-4 text-left ${readOnly ? '' : 'active:scale-[0.99]'}`}
+    <div
+      className="w-full rounded-2xl border bg-surface p-4 text-left"
       style={{ borderColor: `${goal.color}40` }}
     >
-      <div className="flex items-center gap-3">
-        <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl"
-          style={{ backgroundColor: `${goal.color}26` }}
+      <div className="flex w-full items-center gap-3">
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.99]"
         >
-          {goal.emoji}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-ink">{goal.title}</p>
-          <p className="text-xs text-ink-dim">
-            {goal.kind === 'counter' ? `${goal.target_per_day} ${goal.unit ?? ''}/day` : goal.difficulty}
-            {streak > 0 && ` · 🔥 ${streak} day${streak === 1 ? '' : 's'}`}
-          </p>
-        </div>
-        {!readOnly && <span className="text-ink-dim">›</span>}
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl"
+            style={{ backgroundColor: `${goal.color}26` }}
+          >
+            {goal.emoji}
+          </span>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="truncate font-medium text-ink">{goal.title}</p>
+            <p className="text-xs text-ink-dim">
+              {goal.kind === 'counter' ? `${goal.target_per_day} ${goal.unit ?? ''}/day` : goal.difficulty}
+              {streak > 0 && ` · 🔥 ${streak} day${streak === 1 ? '' : 's'}`}
+            </p>
+          </div>
+          <span className="text-ink-dim">›</span>
+        </button>
+        {!readOnly && onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 px-2 py-1 text-sm text-ink-dim underline decoration-dotted underline-offset-2"
+          >
+            Edit
+          </button>
+        )}
       </div>
 
       <div className="mt-3 flex gap-1">
@@ -211,6 +240,6 @@ function GoalCard({
           />
         ))}
       </div>
-    </button>
+    </div>
   )
 }
