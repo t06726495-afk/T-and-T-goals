@@ -60,7 +60,7 @@ export function LoginPage() {
         {status === 'sent' ? (
           <>
             <div className="mt-6 rounded-2xl border border-him/30 bg-him/10 p-4 text-sm text-ink">
-              We sent a 6-digit code to <span className="font-medium">{email}</span>.
+              We sent a code to <span className="font-medium">{email}</span>.
               Enter it below — no need to leave this app.
             </div>
 
@@ -70,8 +70,8 @@ export function LoginPage() {
                 required
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="123456"
+                maxLength={10}
+                placeholder="12345678"
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 className="min-h-11 w-full rounded-xl border border-border bg-surface px-4 py-2 text-center text-2xl tracking-[0.3em] text-ink placeholder:tracking-normal placeholder:text-ink-dim focus:border-him focus:outline-none"
