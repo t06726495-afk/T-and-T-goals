@@ -35,6 +35,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data as Profile | null
   }, [])
 
+  useEffect(() => {
+    if (profile?.accent_color) {
+      document.documentElement.style.setProperty('--color-mine', profile.accent_color)
+    }
+  }, [profile?.accent_color])
+
   const refreshProfile = useCallback(async () => {
     if (session?.user.id) {
       await fetchProfile(session.user.id)

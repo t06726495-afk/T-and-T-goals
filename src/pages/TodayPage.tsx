@@ -5,7 +5,7 @@ export function TodayPage() {
     <div className="mx-auto max-w-2xl px-4 py-6">
       <h1 className="text-2xl font-semibold text-ink">Hey 👋</h1>
       <p className="mt-1 text-ink-dim">
-        This is <span className="text-him">mogging</span> — install it, and
+        This is <span className="text-mine">mogging</span> — install it, and
         we'll build the rest from here.
       </p>
 

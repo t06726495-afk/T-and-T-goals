@@ -32,7 +32,7 @@ export function InstallStatus() {
 
   if (standalone) {
     return (
-      <div className="rounded-2xl border border-him/30 bg-him/10 p-4 text-sm text-ink">
+      <div className="rounded-2xl border border-mine/30 bg-mine/10 p-4 text-sm text-ink">
         ✅ Installed — you're running this as a standalone app.
       </div>
     )
@@ -71,7 +71,7 @@ export function InstallStatus() {
       {deferredPrompt && (
         <button
           type="button"
-          className="mt-3 min-h-11 rounded-full bg-him px-4 py-2 font-medium text-bg"
+          className="mt-3 min-h-11 rounded-full bg-mine px-4 py-2 font-medium text-bg"
           onClick={async () => {
             const promptEvent = deferredPrompt as Event & {
               prompt: () => void

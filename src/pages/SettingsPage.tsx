@@ -25,7 +25,7 @@ export function SettingsPage() {
       <button
         type="button"
         onClick={() => void signOut()}
-        className="mt-8 min-h-11 w-full rounded-xl border border-border px-4 py-2 font-medium text-her"
+        className="mt-8 min-h-11 w-full rounded-xl border border-border px-4 py-2 font-medium text-danger"
       >
         Sign out
       </button>
@@ -71,7 +71,7 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
         <input
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-him focus:outline-none"
+          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
         />
       </label>
 
@@ -84,7 +84,7 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
               type="button"
               onClick={() => setEmoji(e)}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                emoji === e ? 'border-him bg-him/10' : 'border-border bg-surface-raised'
+                emoji === e ? 'border-mine bg-mine/10' : 'border-border bg-surface-raised'
               }`}
             >
               {e}
@@ -124,7 +124,7 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
         <input
           value={timezone}
           onChange={(e) => setTimezone(e.target.value)}
-          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-him focus:outline-none"
+          className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-ink focus:border-mine focus:outline-none"
         />
       </label>
 
@@ -132,7 +132,7 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
         type="button"
         onClick={() => void save()}
         disabled={saving}
-        className="mt-4 min-h-11 rounded-xl bg-him px-4 py-2 font-medium text-bg disabled:opacity-60"
+        className="mt-4 min-h-11 rounded-xl bg-mine px-4 py-2 font-medium text-bg disabled:opacity-60"
       >
         {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save profile'}
       </button>
@@ -208,7 +208,7 @@ function PairingCard() {
       {loading && <p className="mt-2 text-sm text-ink-dim">Loading…</p>}
 
       {!loading && couple && couple.member_count === 2 && partner && (
-        <div className="mt-3 flex items-center gap-3 rounded-xl border border-her/30 bg-her/10 p-3">
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-partner/30 bg-partner/10 p-3">
           <span className="text-2xl">{partner.avatar_emoji}</span>
           <p className="text-sm text-ink">
             Paired with{' '}
@@ -222,7 +222,7 @@ function PairingCard() {
           <p className="mt-2 text-sm text-ink-dim">
             Share this code with her — she enters it below to pair.
           </p>
-          <p className="mt-2 text-center text-3xl font-bold tracking-[0.3em] text-him">
+          <p className="mt-2 text-center text-3xl font-bold tracking-[0.3em] text-mine">
             {couple.invite_code}
           </p>
 
@@ -232,12 +232,12 @@ function PairingCard() {
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="Or enter her code"
               maxLength={6}
-              className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-4 py-2 uppercase tracking-widest text-ink placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-dim focus:border-him focus:outline-none"
+              className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-4 py-2 uppercase tracking-widest text-ink placeholder:normal-case placeholder:tracking-normal placeholder:text-ink-dim focus:border-mine focus:outline-none"
             />
             <button
               type="submit"
               disabled={joining || code.length < 6}
-              className="min-h-11 rounded-xl bg-her px-4 py-2 font-medium text-bg disabled:opacity-60"
+              className="min-h-11 rounded-xl bg-partner px-4 py-2 font-medium text-bg disabled:opacity-60"
             >
               {joining ? 'Joining…' : 'Join'}
             </button>
@@ -245,7 +245,7 @@ function PairingCard() {
         </>
       )}
 
-      {error && <p className="mt-3 text-sm text-her">{error}</p>}
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
     </section>
   )
 }

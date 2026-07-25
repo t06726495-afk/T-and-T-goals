@@ -1,10 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-him: #22c55e;
-  --color-him-dim: #16a34a;
-  --color-her: #ec4899;
-  --color-her-dim: #db2777;
+  /* "mine" is overridden at runtime (see AuthProvider) once your profile's
+     accent_color loads; these are just the pre-login/fallback defaults.
+     "partner" will get the same runtime treatment once Phase 3+ screens
+     fetch partner data broadly enough to drive it everywhere. */
+  --color-mine: #22c55e;
+  --color-mine-dim: #16a34a;
+  --color-partner: #ec4899;
+  --color-partner-dim: #db2777;
+
+  --color-danger: #ef4444;
+  --color-danger-dim: #dc2626;
 
   --color-bg: #0e0f13;
   --color-surface: #17181f;
