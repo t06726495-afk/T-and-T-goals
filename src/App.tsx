@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { TodayPage } from './pages/TodayPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { PartnerPage } from './pages/PartnerPage'
+import { PointsPage } from './pages/PointsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 
@@ -48,10 +49,7 @@ function AuthGate() {
           <Route path="/" element={<TodayPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/partner" element={<PartnerPage />} />
-          <Route
-            path="/points"
-            element={<ComingSoonPage title="Points" phase="Arriving in Phase 5." />}
-          />
+          <Route path="/points" element={<PointsPage />} />
           <Route
             path="/planner"
             element={<ComingSoonPage title="Planner" phase="Arriving in Phase 7." />}

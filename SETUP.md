@@ -231,11 +231,28 @@ are never computed in the browser). One more migration file to run:
 
 That's it — no new env vars or dashboard settings for this one.
 
+Phase 4 (the year-grid heatmap) needed no new migration — it's built entirely
+on tables from earlier phases.
+
+## 12. Run the Phase 5 migration
+
+Phase 5 adds streak bonuses, levels, and the real Points screen.
+
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy the contents of
+   `supabase/migrations/20260727000000_streaks_levels_points.sql` from the
+   repo and paste it in.
+3. Click **Run**. Should say "Success."
+
+This one also does a one-time backfill of `profiles.points_total` /
+`current_level` from whatever tasks and goal logs already exist, so testing
+you've done in earlier phases gets reflected immediately instead of starting
+from zero.
+
 ## What's next
 
-Phase 4 adds the year-grid heatmap (tap a goal to see the full year, GitHub
-contribution-graph style), and Phase 5 adds streak bonuses, levels, and a
-proper Points comparison screen.
+Phase 6 adds push notifications, nudges, and the GitHub Actions cron job for
+reminders.
 
 ## Notes on `npm audit`
 
