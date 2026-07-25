@@ -103,16 +103,17 @@ functions, and the signup-allowlist trigger.
 
 ## 5. Lock signup to your two emails
 
-The trigger from the migration checks new signups against a setting stored
-in the database itself (not a file), because a Postgres trigger can't read
-Vercel's environment variables directly. You set it once, here:
+The trigger from the migration checks new signups against a small table
+(`allowed_emails`) that's locked down so the app itself can never read or
+write it — only you, from the SQL Editor. Seed it with your two addresses:
 
 1. Still in the **SQL Editor**, open another **New query**.
-2. Paste this, replacing the two addresses with your real ones (keep them
-   comma-separated, no spaces, no quotes changed):
+2. Paste this exactly (already has your two emails filled in):
 
    ```sql
-   ALTER DATABASE postgres SET app.allowed_emails = 'brutdogjr09@gmail.com,taylormagee10@icloud.com';
+   insert into public.allowed_emails (email) values
+     ('brutdogjr09@gmail.com'),
+     ('taylormagee10@icloud.com');
    ```
 
 3. Click **Run**.
@@ -121,8 +122,10 @@ Only these two addresses will ever be able to create an account — anyone
 else who finds the URL and tries to sign in gets a clean "This app is
 invite-only" message instead of an account.
 
-> If you ever need to change an email later, just re-run that same command
-> with the new list.
+> If you ever need to add, remove, or change an email later:
+> `insert into public.allowed_emails (email) values ('new@example.com');` to
+> add one, or `delete from public.allowed_emails where email = 'old@example.com';`
+> to remove one.
 
 ## 6. Turn on magic-link email auth
 

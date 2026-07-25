@@ -343,12 +343,20 @@ create trigger nudges_immutable_trigger
 -- ============================================================================
 -- SIGNUP ALLOWLIST + AUTO-PROVISIONING
 --
--- The allowed emails live in a Postgres database setting (app.allowed_emails),
--- set once via:
---   ALTER DATABASE postgres SET app.allowed_emails = 'you@example.com,partner@example.com';
--- See SETUP.md for the exact command to run. This keeps the allowlist out of
--- git while still being "an env var checked in a Postgres trigger."
+-- The allowed emails live in a small table rather than a Postgres database
+-- setting: Supabase's hosted Postgres does not permit even the `postgres`
+-- role to run `ALTER DATABASE ... SET` for custom parameters. RLS is
+-- enabled with no policies at all, so this table is completely unreachable
+-- through the client API (anon/authenticated) — only the SECURITY DEFINER
+-- trigger below (and you, via the SQL Editor) can read or write it.
+-- See SETUP.md for the exact INSERT command to seed your two emails.
 -- ============================================================================
+
+create table public.allowed_emails (
+  email text primary key
+);
+
+alter table public.allowed_emails enable row level security;
 
 create or replace function public.enforce_allowlist()
 returns trigger
@@ -356,17 +364,9 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  allowed text[];
 begin
-  allowed := string_to_array(current_setting('app.allowed_emails', true), ',');
-
-  if allowed is null or array_length(allowed, 1) is null then
-    raise exception 'Signup is not configured: app.allowed_emails is not set. See SETUP.md.';
-  end if;
-
-  if not (
-    lower(trim(new.email)) = any (select lower(trim(x)) from unnest(allowed) as x)
+  if not exists (
+    select 1 from allowed_emails where lower(email) = lower(trim(new.email))
   ) then
     raise exception 'This app is invite-only.';
   end if;
