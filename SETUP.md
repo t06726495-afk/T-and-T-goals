@@ -141,36 +141,79 @@ invite-only" message instead of an account.
    stay on for anyone to sign in at all; the allowlist trigger from Step 5 is
    what actually restricts it to just you two.
 
-## 7. Get your API keys
+## 7. Set up reliable email delivery (Resend)
 
-1. Go to **Project Settings** (gear icon) → **API**.
-2. Copy the **Project URL** (looks like `https://xxxxxxxx.supabase.co`).
-3. Copy the **anon public** key (a long string starting with `eyJ...`) —
-   **not** the `service_role` key, that one must never leave this dashboard.
+Supabase's built-in email sender is capped at **2 emails per hour** — fine to
+discover once, not fine to actually use. Route auth emails through
+[Resend](https://resend.com) instead (free tier: 3,000 emails/month, no
+domain verification needed to get started).
 
-## 8. Add the environment variables to Vercel
+1. Sign up at [resend.com](https://resend.com).
+2. In the Resend dashboard, go to **API Keys → Create API Key**. Name it
+   anything, leave permissions default, click **Create**, and **copy the key
+   immediately** (starts with `re_...`) — Resend won't show it again.
+3. Back in Supabase: **Authentication → Emails → SMTP Settings**.
+4. Toggle **Enable custom SMTP** on and fill in:
+   - **Sender email**: `onboarding@resend.dev` (Resend's shared test sender —
+     works immediately, no setup)
+   - **Sender name**: `mogging`
+   - **Host**: `smtp.resend.com`
+   - **Port**: `465`
+   - **Username**: `resend`
+   - **Password**: the Resend API key from step 2
+5. Click **Save changes**.
+6. Now go to **Authentication → Emails → Templates**, open the **Magic
+   Link** template, and make sure the body includes `{{ .Token }}` somewhere
+   visible (this is the 6-digit code) — not just `{{ .ConfirmationURL }}`.
+   If it's missing, add a line like:
+
+   ```html
+   <h2>Your code: {{ .Token }}</h2>
+   ```
+
+   This matters because tapping the emailed link opens **Safari**, not your
+   installed home-screen app, and iOS keeps those two completely separate —
+   a session started in Safari never reaches the installed app. Typing the
+   6-digit code directly into the app (which the app's Login screen supports)
+   sidesteps that entirely.
+
+## 8. Get your API keys
+
+1. Go to **Project Settings** (gear icon) → **API Keys**.
+2. Copy the **Project URL** — check under **Data API** in the same settings
+   section if it's not shown alongside the keys. It looks like
+   `https://xxxxxxxx.supabase.co` — nothing after `.supabase.co`, no
+   `/rest/v1` or other path on the end.
+3. Copy the **Publishable key** (starts with `sb_publishable_...`) — **not**
+   the **Secret key** (`sb_secret_...`), that one must never leave this
+   dashboard.
+
+## 9. Add the environment variables to Vercel
 
 1. Go to your project on [vercel.com](https://vercel.com), then **Settings →
-   Environment Variables**.
+   Environments → Production** (Vercel recently moved env vars under each
+   environment rather than a standalone tab).
 2. Add:
-   - `VITE_SUPABASE_URL` = the Project URL from Step 7
-   - `VITE_SUPABASE_ANON_KEY` = the anon public key from Step 7
-3. Leave "Environments" set to all three (Production, Preview, Development).
+   - `VITE_SUPABASE_URL` = the Project URL from Step 8
+   - `VITE_SUPABASE_ANON_KEY` = the Publishable key from Step 8
+3. Turn **Sensitive off** for both (they're safe to expose in the browser,
+   and leaving it off means you can still view them later if needed).
 4. Click **Save**.
 5. Go to the **Deployments** tab, open the three-dot menu on the latest
    deployment, and click **Redeploy** so the new variables take effect.
 
-## 9. Sign in and pair your accounts
+## 10. Sign in and pair your accounts
 
 1. Open the app on your phone (from the home screen icon).
-2. Enter your email, tap **Send magic link**, then open the email and tap
-   the link — it'll open the app and log you in.
-3. Go to **Settings**. You'll see a 6-character invite code — send it to her
+2. Enter your email, tap **Send sign-in code**.
+3. Check your email for a 6-digit code, then type it directly into the app
+   and tap **Verify code** — no need to tap anything in the email itself.
+4. Go to **Settings**. You'll see a 6-character invite code — send it to her
    (text, whatever).
-4. Have her open the same Vercel URL, install it the same way (Phase 1,
-   step 2), sign in with her email, go to Settings, and enter your code in
-   the **"Or enter her code"** field.
-5. You should now both see "Paired with ..." on the Settings screen.
+5. Have her open the same Vercel URL, install it the same way (Phase 1,
+   step 2), sign in with her email the same way (code, not link), go to
+   Settings, and enter your code in the **"Or enter her code"** field.
+6. You should now both see "Paired with ..." on the Settings screen.
 
 If her sign-in fails with "This app is invite-only," double check her exact
 email address matches what you put in Step 5 — it's an exact match
