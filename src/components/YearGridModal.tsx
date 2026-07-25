@@ -33,11 +33,16 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Fetch 60 days before Jan 1 too (not shown in the grid, never used for
+    // longest-streak/completed-count/percent) purely so the "Streak" stat
+    // can walk backward across the year boundary — otherwise a streak that
+    // started in December reads as reset to a few days every January 1st.
+    const lookbackStart = shiftDate(`${year}-01-01`, -60)
     const { data } = await supabase
       .from('goal_logs')
       .select('*')
       .eq('goal_id', goal.id)
-      .gte('log_date', `${year}-01-01`)
+      .gte('log_date', lookbackStart)
       .lte('log_date', `${year}-12-31`)
     const map = new Map<string, GoalLog>()
     for (const l of (data as GoalLog[] | null) ?? []) map.set(l.log_date, l)
@@ -60,16 +65,24 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
       .then(({ data }) => setTemplate(data))
   }, [goal.id, goal.kind, profile, readOnly])
 
-  const completedDates = useMemo(() => {
+  // Full set (includes the pre-Jan-1 lookback) for the streak walk-back;
+  // year-scoped subset for stats that should only reflect this year.
+  const completedDatesAll = useMemo(() => {
     const s = new Set<string>()
     for (const [date, log] of logs) if (log.completed) s.add(date)
     return s
   }, [logs])
 
+  const completedDates = useMemo(() => {
+    const s = new Set<string>()
+    for (const date of completedDatesAll) if (date.startsWith(`${year}-`)) s.add(date)
+    return s
+  }, [completedDatesAll, year])
+
   const { weeks, monthLabels } = useMemo(() => buildYearGrid(year, today), [year, today])
 
   const streakRef = year >= currentYear ? today : `${year}-12-31`
-  const streak = currentStreak(completedDates, streakRef)
+  const streak = currentStreak(completedDatesAll, streakRef)
   const longest = longestStreak(completedDates, year, today)
   const elapsed = daysElapsedInYear(year, today)
   const completedCount = completedDates.size
@@ -97,8 +110,14 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 sm:items-center">
-      <div className="safe-bottom max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl">
+    <div
+      className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="safe-bottom max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <span
@@ -112,7 +131,7 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-ink-dim"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-lg text-ink-dim"
           >
             ✕
           </button>
