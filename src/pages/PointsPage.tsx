@@ -61,10 +61,13 @@ export function PointsPage() {
     }
 
     setLoading(false)
-    // refreshProfile is stable from context; profile.id is what actually
-    // varies and is already captured via `profile`.
+    // Deliberately depend on profile.id, not the whole profile object:
+    // refreshProfile() below replaces the profile object with a new
+    // reference on every call (even when the data is unchanged), and
+    // depending on the object itself would re-trigger the effect below on
+    // every load, forever.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile])
+  }, [profile?.id])
 
   useEffect(() => {
     void load()
