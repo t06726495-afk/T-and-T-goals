@@ -6,6 +6,7 @@ import { ensureTodaysTasks } from '../lib/recurrence'
 import { timeOfDayLabel } from '../lib/date'
 import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
+import { AnimatedCheck } from '../components/AnimatedCheck'
 import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
@@ -336,14 +337,24 @@ export function TodayPage() {
                 >
                   −
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void adjustCounter(goal, 1)}
-                  className="flex h-11 w-11 items-center justify-center rounded-full font-semibold text-bg"
-                  style={{ backgroundColor: goal.color }}
-                >
-                  +1
-                </button>
+                <span className="relative">
+                  {celebrating === goal.id && (
+                    <span
+                      className="animate-ring-burst absolute inset-0 rounded-full border-2"
+                      style={{ borderColor: goal.color }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void adjustCounter(goal, 1)}
+                    className={`flex h-11 w-11 items-center justify-center rounded-full font-semibold text-bg ${
+                      celebrating === goal.id ? 'animate-check-bounce' : ''
+                    }`}
+                    style={{ backgroundColor: goal.color }}
+                  >
+                    +1
+                  </button>
+                </span>
                 {celebrating === goal.id && <Confetti />}
                 {flash?.id === goal.id && (
                   <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
@@ -369,12 +380,17 @@ export function TodayPage() {
                     task.done ? 'border-mine/30 bg-mine/10' : 'border-border bg-surface'
                   }`}
                 >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${
-                      task.done ? 'border-mine bg-mine text-bg' : 'border-border'
-                    } ${celebrating === task.id ? 'animate-check-pop' : ''}`}
-                  >
-                    {task.done && '✓'}
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                    {celebrating === task.id && (
+                      <span className="animate-ring-burst absolute inset-0 rounded-full border-2 border-mine" />
+                    )}
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-bg ${
+                        task.done ? 'border-mine bg-mine' : 'border-border'
+                      } ${celebrating === task.id ? 'animate-check-bounce' : ''}`}
+                    >
+                      <AnimatedCheck done={task.done} celebrating={celebrating === task.id} />
+                    </span>
                   </span>
                   <span className={`flex-1 ${task.done ? 'text-ink-dim line-through' : 'text-ink'}`}>
                     {task.title}

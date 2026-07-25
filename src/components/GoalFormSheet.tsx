@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import {
@@ -44,25 +44,62 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
   const [error, setError] = useState('')
 
   // Swipe-down-to-dismiss on the handle bar only, so it doesn't fight with
-  // scrolling the form content.
-  const [dragY, setDragY] = useState(0)
+  // scrolling the form content. The touchmove listener is attached natively
+  // (not via React's onTouchMove prop) because browsers — and React's own
+  // event delegation in some versions — default touch listeners to passive,
+  // which silently ignores preventDefault(). Without that, the page behind
+  // the sheet scrolls along with the drag, which is what made this feel
+  // glitchy before.
+  const handleRef = useRef<HTMLDivElement>(null)
   const dragStartY = useRef<number | null>(null)
+  const dragYRef = useRef(0)
+  const [dragY, setDragYState] = useState(0)
+  const [closing, setClosing] = useState(false)
 
-  function onHandleTouchStart(e: React.TouchEvent) {
-    dragStartY.current = e.touches[0].clientY
+  function setDragY(value: number) {
+    dragYRef.current = value
+    setDragYState(value)
   }
-  function onHandleTouchMove(e: React.TouchEvent) {
-    if (dragStartY.current === null) return
-    const delta = e.touches[0].clientY - dragStartY.current
-    if (delta > 0) setDragY(delta)
-  }
-  function onHandleTouchEnd() {
-    if (dragY > 80) {
-      onClose()
-    } else {
-      setDragY(0)
+
+  useEffect(() => {
+    const el = handleRef.current
+    if (!el) return
+
+    const onTouchStart = (e: TouchEvent) => {
+      dragStartY.current = e.touches[0].clientY
     }
-    dragStartY.current = null
+    const onTouchMove = (e: TouchEvent) => {
+      if (dragStartY.current === null) return
+      const delta = e.touches[0].clientY - dragStartY.current
+      if (delta > 0) {
+        e.preventDefault()
+        setDragY(delta)
+      }
+    }
+    const onTouchEnd = () => {
+      if (dragYRef.current > 80) {
+        setClosing(true)
+        setDragY(window.innerHeight)
+        setTimeout(onClose, 200)
+      } else {
+        setDragY(0)
+      }
+      dragStartY.current = null
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [onClose])
+
+  function handleBackdropClick() {
+    setClosing(true)
+    setTimeout(onClose, 150)
   }
 
   async function ensureDailyTemplate(goalId: string, goalTitle: string) {
@@ -163,20 +200,20 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 sm:items-center">
+    <div
+      className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 sm:items-center"
+      style={{ transition: 'background-color 0.2s', backgroundColor: closing ? 'transparent' : undefined }}
+      onClick={handleBackdropClick}
+    >
       <div
-        className="safe-bottom max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl"
+        className="safe-bottom max-h-[90dvh] w-full max-w-lg overscroll-contain overflow-y-auto rounded-t-3xl bg-surface p-4 sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
         style={{
           transform: `translateY(${dragY}px)`,
-          transition: dragY === 0 ? 'transform 0.2s' : 'none',
+          transition: dragY === 0 || closing ? 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)' : 'none',
         }}
       >
-        <div
-          className="mx-auto -mt-1 mb-2 h-8 w-16 touch-none sm:hidden"
-          onTouchStart={onHandleTouchStart}
-          onTouchMove={onHandleTouchMove}
-          onTouchEnd={onHandleTouchEnd}
-        >
+        <div ref={handleRef} className="mx-auto -mt-1 mb-2 h-8 w-16 touch-none sm:hidden">
           <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-border" />
         </div>
         <h2 className="text-lg font-semibold text-ink">{isEdit ? 'Edit goal' : 'New goal'}</h2>
