@@ -219,10 +219,23 @@ If her sign-in fails with "This app is invite-only," double check her exact
 email address matches what you put in Step 5 — it's an exact match
 (case-insensitive, but no typos).
 
+## 11. Run the Phase 3 migration
+
+Phase 3 adds server-side points calculation (a Postgres trigger, so points
+are never computed in the browser). One more migration file to run:
+
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy the contents of `supabase/migrations/20260726000000_points_and_tasks.sql`
+   from the repo and paste it in.
+3. Click **Run**. Should say "Success."
+
+That's it — no new env vars or dashboard settings for this one.
+
 ## What's next
 
-Phase 3 adds real goals (checkbox and counter), the Today screen with daily
-tasks, and the daily task-generation logic.
+Phase 4 adds the year-grid heatmap (tap a goal to see the full year, GitHub
+contribution-graph style), and Phase 5 adds streak bonuses, levels, and a
+proper Points comparison screen.
 
 ## Notes on `npm audit`
 

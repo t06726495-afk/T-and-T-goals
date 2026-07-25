@@ -2,9 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { CoupleInfo, Profile } from '../lib/types'
-
-const EMOJI_CHOICES = ['🙂', '😎', '🥰', '🔥', '🌱', '💪', '🐶', '🐱', '⭐', '🎯']
-const COLOR_CHOICES = ['#22c55e', '#ec4899', '#3b82f6', '#f97316', '#a855f7', '#14b8a6', '#ef4444', '#eab308']
+import { EMOJI_CHOICES, COLOR_CHOICES } from '../lib/pickers'
 
 export function SettingsPage() {
   const { profile, refreshProfile, signOut } = useAuth()

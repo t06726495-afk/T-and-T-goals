@@ -13,6 +13,7 @@ import type { Profile } from './types'
 interface AuthContextValue {
   session: Session | null
   profile: Profile | null
+  coupleId: string | null
   loading: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [coupleId, setCoupleId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -64,6 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (active) setProfile({ ...p, timezone: detected })
           }
         }
+        // Every signed-in user needs a couple_id to create goals, even
+        // before they've paired — get_or_create_my_couple hands back their
+        // own solo couple until a partner joins it.
+        const { data: coupleData } = await supabase.rpc('get_or_create_my_couple')
+        if (active && coupleData) {
+          setCoupleId((coupleData as { couple_id: string }).couple_id)
+        }
       }
       if (active) setLoading(false)
     })
@@ -74,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fetchProfile(newSession.user.id)
       } else {
         setProfile(null)
+        setCoupleId(null)
       }
     })
 
@@ -88,7 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider
+      value={{ session, profile, coupleId, loading, refreshProfile, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   )
