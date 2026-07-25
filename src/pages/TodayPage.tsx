@@ -392,8 +392,16 @@ export function TodayPage() {
                       <AnimatedCheck done={task.done} celebrating={celebrating === task.id} />
                     </span>
                   </span>
-                  <span className={`flex-1 ${task.done ? 'text-ink-dim line-through' : 'text-ink'}`}>
-                    {task.title}
+                  <span
+                    className={`flex-1 transition-colors duration-300 ${task.done ? 'text-ink-dim' : 'text-ink'}`}
+                  >
+                    <span
+                      className={`strike-wrap ${task.done ? 'is-struck' : ''} ${
+                        celebrating === task.id ? 'is-animating' : ''
+                      }`}
+                    >
+                      {task.title}
+                    </span>
                   </span>
                   {celebrating === task.id && <Confetti />}
                 </button>
