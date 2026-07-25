@@ -1,8 +1,8 @@
 # Setup Guide
 
 Written so you can follow it with zero prior deployment experience. Do the
-steps in order. This file grows as we finish each build phase — right now it
-only covers **Phase 1: getting the app installed on your phone**.
+steps in order. This file grows as we finish each build phase — it now
+covers **Phase 1 (install) and Phase 2 (database + login + pairing)**.
 
 ## What you need before starting
 
@@ -10,6 +10,8 @@ only covers **Phase 1: getting the app installed on your phone**.
   `t06726495-afk/T-and-T-goals`)
 - A free [Vercel](https://vercel.com) account — sign up with **"Continue with
   GitHub"** so it can see your repos without extra setup
+- A free [Supabase](https://supabase.com) account — sign up with **"Continue
+  with GitHub"** too (needed starting in Phase 2)
 - A phone (iPhone or Android) to test the install on
 
 ## 1. Create a Vercel project from the repo
@@ -69,12 +71,112 @@ Open the app from the home screen icon (not the browser). You should see:
   it opened as a regular browser tab — go back and open it from the home
   screen icon, not from Safari/Chrome directly.
 
+## 3. Create the Supabase project
+
+1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and sign in
+   with GitHub.
+2. Click **New project**.
+3. Pick an organization (Supabase creates a personal one by default), name
+   the project (e.g. `mogging`), and set a **database password** — click the
+   dice icon to generate a strong one and **save it somewhere** (a notes app
+   is fine; you won't need it day-to-day, but keep it in case you ever need
+   direct database access).
+4. Pick the region closest to you and her.
+5. Click **Create new project**. Wait 1–2 minutes for it to finish
+   provisioning.
+
+## 4. Run the database migration
+
+1. In the Supabase dashboard, open your project, then click **SQL Editor**
+   in the left sidebar.
+2. Click **New query**.
+3. Open `supabase/migrations/20260725000000_init.sql` from the repo (on
+   GitHub, browse to that path and click the file, or use the "raw" view),
+   select all, and copy it.
+4. Paste the entire file into the SQL Editor.
+5. Click **Run** (or press Ctrl+Enter). It should say "Success. No rows
+   returned." If you get an error, stop and paste the exact error back to
+   me — don't re-run partial edits.
+
+This creates every table, all the row-level-security policies, the pairing
+functions, and the signup-allowlist trigger.
+
+## 5. Lock signup to your two emails
+
+The trigger from the migration checks new signups against a setting stored
+in the database itself (not a file), because a Postgres trigger can't read
+Vercel's environment variables directly. You set it once, here:
+
+1. Still in the **SQL Editor**, open another **New query**.
+2. Paste this, replacing the two addresses with your real ones (keep them
+   comma-separated, no spaces, no quotes changed):
+
+   ```sql
+   ALTER DATABASE postgres SET app.allowed_emails = 'brutdogjr09@gmail.com,taylormagee10@icloud.com';
+   ```
+
+3. Click **Run**.
+
+Only these two addresses will ever be able to create an account — anyone
+else who finds the URL and tries to sign in gets a clean "This app is
+invite-only" message instead of an account.
+
+> If you ever need to change an email later, just re-run that same command
+> with the new list.
+
+## 6. Turn on magic-link email auth
+
+1. In the left sidebar, go to **Authentication → Sign In / Providers**.
+2. Confirm the **Email** provider is enabled (it is by default) — you don't
+   need a password provider, we're using magic links (OTP) only.
+3. Go to **Authentication → URL Configuration**.
+4. Set **Site URL** to your Vercel URL from Phase 1 (e.g.
+   `https://t-and-t-goals-xxxx.vercel.app`).
+5. Under **Redirect URLs**, add the same URL again (and later, add your real
+   custom domain here too if you set one up).
+6. Leave **"Allow new user signups"** turned ON — that global switch has to
+   stay on for anyone to sign in at all; the allowlist trigger from Step 5 is
+   what actually restricts it to just you two.
+
+## 7. Get your API keys
+
+1. Go to **Project Settings** (gear icon) → **API**.
+2. Copy the **Project URL** (looks like `https://xxxxxxxx.supabase.co`).
+3. Copy the **anon public** key (a long string starting with `eyJ...`) —
+   **not** the `service_role` key, that one must never leave this dashboard.
+
+## 8. Add the environment variables to Vercel
+
+1. Go to your project on [vercel.com](https://vercel.com), then **Settings →
+   Environment Variables**.
+2. Add:
+   - `VITE_SUPABASE_URL` = the Project URL from Step 7
+   - `VITE_SUPABASE_ANON_KEY` = the anon public key from Step 7
+3. Leave "Environments" set to all three (Production, Preview, Development).
+4. Click **Save**.
+5. Go to the **Deployments** tab, open the three-dot menu on the latest
+   deployment, and click **Redeploy** so the new variables take effect.
+
+## 9. Sign in and pair your accounts
+
+1. Open the app on your phone (from the home screen icon).
+2. Enter your email, tap **Send magic link**, then open the email and tap
+   the link — it'll open the app and log you in.
+3. Go to **Settings**. You'll see a 6-character invite code — send it to her
+   (text, whatever).
+4. Have her open the same Vercel URL, install it the same way (Phase 1,
+   step 2), sign in with her email, go to Settings, and enter your code in
+   the **"Or enter her code"** field.
+5. You should now both see "Paired with ..." on the Settings screen.
+
+If her sign-in fails with "This app is invite-only," double check her exact
+email address matches what you put in Step 5 — it's an exact match
+(case-insensitive, but no typos).
+
 ## What's next
 
-Phase 2 adds Supabase (the database + login) and updates this guide with:
-account creation, running the SQL migration, setting the two allowed email
-addresses, generating and setting environment variables, and how to pair
-your two accounts.
+Phase 3 adds real goals (checkbox and counter), the Today screen with daily
+tasks, and the daily task-generation logic.
 
 ## Notes on `npm audit`
 
