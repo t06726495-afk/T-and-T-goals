@@ -117,10 +117,13 @@ begin
 end;
 $$;
 
+-- Dropped first so this whole file stays safe to re-run.
+drop trigger if exists tasks_bump_points_trigger on public.tasks;
 create trigger tasks_bump_points_trigger
   after insert or update or delete on public.tasks
   for each row execute function public.bump_profile_points();
 
+drop trigger if exists goal_logs_bump_points_trigger on public.goal_logs;
 create trigger goal_logs_bump_points_trigger
   after insert or update or delete on public.goal_logs
   for each row execute function public.bump_profile_points();
@@ -149,6 +152,7 @@ begin
 end;
 $$;
 
+drop trigger if exists goals_recalculate_points_trigger on public.goals;
 create trigger goals_recalculate_points_trigger
   after update on public.goals
   for each row execute function public.goals_recalculate_points_on_change();
