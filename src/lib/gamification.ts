@@ -6,6 +6,7 @@ export interface PointsSummary {
   best_day_date: string | null
   active_days: number
   total_completions: number
+  benchmarks_hit: number
   best_streak: number
 }
 
@@ -17,6 +18,7 @@ export const EMPTY_SUMMARY: PointsSummary = {
   best_day_date: null,
   active_days: 0,
   total_completions: 0,
+  benchmarks_hit: 0,
   best_streak: 0,
 }
 
@@ -30,6 +32,7 @@ export function parseSummary(raw: unknown): PointsSummary {
     best_day_date: (r.best_day_date as string | null) ?? null,
     active_days: Number(r.active_days ?? 0),
     total_completions: Number(r.total_completions ?? 0),
+    benchmarks_hit: Number(r.benchmarks_hit ?? 0),
     best_streak: Number(r.best_streak ?? 0),
   }
 }
@@ -107,6 +110,13 @@ export function computeBadges(
       label: 'Month strong',
       hint: 'Hold a 30 day streak',
       earned: summary.best_streak >= 30,
+    },
+    {
+      id: 'benchmark-first',
+      emoji: '🏆',
+      label: 'Target hit',
+      hint: 'Hit a benchmark',
+      earned: summary.benchmarks_hit >= 1,
     },
     {
       id: 'points-500',

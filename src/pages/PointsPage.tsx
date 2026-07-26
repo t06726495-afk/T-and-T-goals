@@ -344,9 +344,9 @@ export function PointsPage() {
           />
           <RecordCard label="Active days" value={`${mySummary.active_days}`} sub="with points" />
           <RecordCard
-            label="Completed"
-            value={`${mySummary.total_completions}`}
-            sub="all time"
+            label="Benchmarks"
+            value={`${mySummary.benchmarks_hit}`}
+            sub="targets hit"
           />
         </div>
       </div>

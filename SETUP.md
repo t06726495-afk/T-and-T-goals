@@ -266,6 +266,19 @@ look wrong or stuck at zero, re-running just this file is the repair hatch.
 > If the Points screen shows "Points stats are unavailable," it means this
 > migration hasn't been run yet.
 
+## 14. Run the benchmarks migration
+
+Adds benchmarks — target numbers you're working toward (a sub-7:30 mile, a
+225 bench, a goal weight), separate from the daily habits that move them.
+
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy the contents of `supabase/migrations/20260729000000_benchmarks.sql`
+   from the repo and paste it in.
+3. Click **Run**. Should say "Success."
+
+Run steps 12 and 13 first. This one also updates the points functions so
+benchmark achievements count toward your totals, and re-runs the resync.
+
 ## What's next
 
 Phase 6 adds push notifications, nudges, and the GitHub Actions cron job for

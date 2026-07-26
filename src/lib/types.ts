@@ -77,3 +77,39 @@ export interface Task {
   points_awarded: number
   created_at: string
 }
+
+export type BenchmarkDirection = 'higher' | 'lower'
+export type ValueFormat = 'number' | 'time'
+
+export interface Benchmark {
+  id: string
+  owner_id: string
+  couple_id: string
+  goal_id: string | null
+  title: string
+  emoji: string
+  color: string
+  unit: string | null
+  direction: BenchmarkDirection
+  value_format: ValueFormat
+  start_value: number | null
+  target_value: number
+  best_value: number | null
+  difficulty: Difficulty
+  visibility: Visibility
+  is_active: boolean
+  achieved_at: string | null
+  points_awarded: number
+  created_at: string
+  archived_at: string | null
+}
+
+export interface BenchmarkEntry {
+  id: string
+  benchmark_id: string
+  owner_id: string
+  value: number
+  recorded_on: string
+  note: string | null
+  created_at: string
+}
