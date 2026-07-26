@@ -9,6 +9,9 @@ import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
 import { AnimatedCheck } from '../components/AnimatedCheck'
 import { ProgressRing } from '../components/ProgressRing'
+import { NudgeComposer } from '../components/NudgeComposer'
+import { notifyPartner } from '../lib/push'
+import { currentStreak, shiftDate } from '../lib/streak'
 import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
@@ -29,6 +32,7 @@ export function TodayPage() {
   const [celebrating, setCelebrating] = useState<string | null>(null)
   const [editingCount, setEditingCount] = useState<string | null>(null)
   const [editingCountValue, setEditingCountValue] = useState('')
+  const [nudging, setNudging] = useState(false)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -158,11 +162,39 @@ export function TodayPage() {
         },
         { onConflict: 'goal_id,log_date' },
       )
+
+      if (nextDone) {
+        void announceGoalProgress(task.goal_id)
+      }
     }
 
     // Pull the server-updated points_total/current_level so the level bar
     // in the header moves as you complete things.
     await refreshProfile()
+  }
+
+  // Tells the partner about a completion. The endpoint re-checks that the
+  // goal is actually shared, so nothing private leaks if this is called for
+  // a private goal.
+  async function announceGoalProgress(goalId: string) {
+    const { data: logs } = await supabase
+      .from('goal_logs')
+      .select('log_date, completed')
+      .eq('goal_id', goalId)
+      .gte('log_date', shiftDate(today, -60))
+
+    const completedDates = new Set(
+      ((logs as { log_date: string; completed: boolean }[] | null) ?? [])
+        .filter((l) => l.completed)
+        .map((l) => l.log_date),
+    )
+    const streak = currentStreak(completedDates, today)
+
+    if (streak > 0 && streak % 7 === 0) {
+      notifyPartner({ kind: 'streak_milestone', goal_id: goalId, streak })
+    } else {
+      notifyPartner({ kind: 'goal_completed', goal_id: goalId })
+    }
   }
 
   async function commitCounter(goal: Goal, nextCount: number) {
@@ -213,6 +245,10 @@ export function TodayPage() {
     if (newPoints > prevPoints) {
       setFlash({ id: goal.id, points: newPoints - prevPoints })
       setTimeout(() => setFlash(null), 1200)
+    }
+
+    if (justHitTarget) {
+      void announceGoalProgress(goal.id)
     }
 
     await refreshProfile()
@@ -286,23 +322,36 @@ export function TodayPage() {
       </div>
 
       {partner && (
-        <button
-          type="button"
-          onClick={() => navigate('/partner')}
-          className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-partner/20 bg-surface p-3 text-left active:scale-[0.99]"
-        >
-          <span className="text-xl">{partner.avatar_emoji}</span>
-          <p className="flex-1 text-sm text-ink">
-            <span className="font-medium">{partner.display_name}</span>
-            {partnerTotal > 0 && (
-              <span className="text-ink-dim">
-                {' '}
-                · {partnerDone}/{partnerTotal} shared goals today
-              </span>
-            )}
-          </p>
-          <span className="text-ink-dim">›</span>
-        </button>
+        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-partner/20 bg-surface p-3">
+          <button
+            type="button"
+            onClick={() => navigate('/partner')}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.99]"
+          >
+            <span className="text-xl">{partner.avatar_emoji}</span>
+            <p className="min-w-0 flex-1 truncate text-sm text-ink">
+              <span className="font-medium">{partner.display_name}</span>
+              {partnerTotal > 0 && (
+                <span className="text-ink-dim">
+                  {' '}
+                  · {partnerDone}/{partnerTotal} shared goals today
+                </span>
+              )}
+            </p>
+            <span className="text-ink-dim">›</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setNudging(true)}
+            className="min-h-11 shrink-0 rounded-full bg-partner px-3 py-2 text-sm font-medium text-bg"
+          >
+            Nudge
+          </button>
+        </div>
+      )}
+
+      {nudging && partner && (
+        <NudgeComposer partner={partner} onClose={() => setNudging(false)} />
       )}
 
       <div className="mt-4">

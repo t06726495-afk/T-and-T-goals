@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { isSupabaseConfigured } from './lib/supabase'
 import { NavBar } from './components/NavBar'
@@ -26,6 +27,27 @@ function NotConfiguredScreen() {
   )
 }
 
+// Tapping a notification focuses an existing window and posts the target
+// route; without this the app would focus but stay on whatever screen it
+// was already showing.
+function ServiceWorkerNavigation() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | undefined
+      if (data?.type === 'navigate' && data.url) {
+        navigate(data.url)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
+
+  return null
+}
+
 function AuthGate() {
   const { session, loading } = useAuth()
 
@@ -43,6 +65,7 @@ function AuthGate() {
 
   return (
     <>
+      <ServiceWorkerNavigation />
       <NavBar />
       <main className="safe-x safe-bottom">
         <Routes>

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { CoupleInfo, Profile } from '../lib/types'
 import { EMOJI_CHOICES, COLOR_CHOICES } from '../lib/pickers'
+import { NotificationSettings } from '../components/NotificationSettings'
 
 export function SettingsPage() {
   const { profile, refreshProfile, signOut } = useAuth()
@@ -15,9 +16,10 @@ export function SettingsPage() {
 
       <PairingCard />
 
+      <NotificationSettings />
+
       <div className="mt-8 rounded-2xl border border-border bg-surface p-4 text-sm text-ink-dim">
-        Notifications, data export, and goal archiving arrive in later
-        phases.
+        Data export arrives in a later phase.
       </div>
 
       <button

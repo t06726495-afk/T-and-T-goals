@@ -279,10 +279,86 @@ Adds benchmarks — target numbers you're working toward (a sub-7:30 mile, a
 Run steps 12 and 13 first. This one also updates the points functions so
 benchmark achievements count toward your totals, and re-runs the resync.
 
+## 15. Run the notifications migration
+
+1. In Supabase, open **SQL Editor → New query**.
+2. Copy the contents of
+   `supabase/migrations/20260730000000_notifications.sql` and paste it in.
+3. Click **Run**.
+
+## 16. Generate your VAPID keys
+
+VAPID is the keypair that proves push messages genuinely came from your app.
+You generate it once and never change it (changing it invalidates every
+existing subscription).
+
+On your computer, in the project folder:
+
+```bash
+npm install
+node scripts/generate-vapid.mjs
+```
+
+It prints four values. Keep that terminal open for the next step.
+
+> No terminal handy? You can generate keys at
+> [vapidkeys.com](https://vapidkeys.com) instead — it runs in the browser.
+> Use the "Public Key" and "Private Key" it gives you.
+
+## 17. Add the notification environment variables to Vercel
+
+Go to Vercel → **Settings → Environments → Production** and add:
+
+| Key | Value | Sensitive? |
+| --- | --- | --- |
+| `VITE_VAPID_PUBLIC_KEY` | the public key | No |
+| `VAPID_PUBLIC_KEY` | the same public key again | No |
+| `VAPID_PRIVATE_KEY` | the private key | **Yes** |
+| `VAPID_SUBJECT` | `mailto:brutdogjr09@gmail.com` | No |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → **Secret key** (`sb_secret_…`) | **Yes** |
+| `CRON_SECRET` | any long random string you make up | **Yes** |
+
+For `CRON_SECRET`, just mash out something long and random — it's a password
+shared between GitHub and Vercel so nobody else can trigger your reminders.
+
+Then **Deployments → ⋯ → Redeploy**.
+
+> The public key appears twice on purpose: the browser needs it to subscribe
+> (`VITE_` prefix), and the server needs it to sign (no prefix). The private
+> key exists only on the server and is never sent to the browser.
+
+## 18. Set up the reminder cron in GitHub
+
+1. Go to your repo on GitHub → **Settings → Secrets and variables → Actions**.
+2. Click **New repository secret** twice:
+   - `APP_URL` = your Vercel URL, no trailing slash (e.g.
+     `https://t-and-t-goals.vercel.app`)
+   - `CRON_SECRET` = the exact same value you put in Vercel
+3. Go to the **Actions** tab. If prompted, enable workflows.
+4. Find **Reminders** in the sidebar and click **Run workflow** to test it
+   now rather than waiting. A green check means it worked.
+
+This runs every 15 minutes. It sends daily reminders at each person's chosen
+local time, delivers nudges that were held during quiet hours, and keeps the
+Supabase project awake (free projects auto-pause after 7 days idle).
+
+## 19. Turn on notifications
+
+On your phone, in the installed app: **Settings → Notifications → Turn on
+notifications**, and accept the system prompt.
+
+If you see "Add to Home Screen first" instead of a button, the app is open in
+a Safari tab rather than from the Home Screen icon. iPhone only allows
+notifications for installed apps (iOS 16.4+, and not in the EU).
+
+While you're there, set your **daily reminder** time and **quiet hours**. A
+nudge sent during her quiet hours is held and delivered when they end — never
+dropped.
+
 ## What's next
 
-Phase 6 adds push notifications, nudges, and the GitHub Actions cron job for
-reminders.
+Phase 7 adds the AI planner, and Phase 8 is polish (offline caching, empty
+states, animation passes).
 
 ## Notes on `npm audit`
 
