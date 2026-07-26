@@ -90,10 +90,16 @@ export function daysElapsedInYear(year: number, todayStr: string): number {
   return Math.floor((today - jan1) / 86400000) + 1
 }
 
-export function counterIntensity(count: number, target: number): 0 | 1 | 2 | 3 {
+// Discrete buckets rather than a precise fill: at ~13px per square, a
+// proportional fill is visually indistinguishable between neighbouring
+// values, which is why contribution-graph style heatmaps universally
+// bucket. Tapping a day shows the exact numbers. Five levels (vs the
+// original four) separates "barely started" from "nearly there".
+export function counterIntensity(count: number, target: number): 0 | 1 | 2 | 3 | 4 {
   if (count <= 0) return 0
   const pct = count / target
-  if (pct < 0.5) return 1
-  if (pct < 1) return 2
-  return 3
+  if (pct < 0.25) return 1
+  if (pct < 0.5) return 2
+  if (pct < 1) return 3
+  return 4
 }

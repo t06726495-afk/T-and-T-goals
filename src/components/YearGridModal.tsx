@@ -102,7 +102,7 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
       }
     }
     const level = counterIntensity(log?.count ?? 0, goal.target_per_day ?? 1)
-    const alpha = ['00', '40', '99', 'ff'][level]
+    const alpha = ['00', '33', '66', 'aa', 'ff'][level]
     return {
       backgroundColor: level === 0 ? 'var(--color-surface-raised)' : `${goal.color}${alpha}`,
       boxShadow: isToday ? `0 0 0 2px ${goal.color}` : undefined,

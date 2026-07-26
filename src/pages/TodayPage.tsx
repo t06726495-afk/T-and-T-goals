@@ -8,6 +8,7 @@ import { levelProgress } from '../lib/levels'
 import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
 import { AnimatedCheck } from '../components/AnimatedCheck'
+import { ProgressRing } from '../components/ProgressRing'
 import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
@@ -372,16 +373,18 @@ export function TodayPage() {
                       style={{ borderColor: goal.color }}
                     />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void adjustCounter(goal, 1)}
-                    className={`flex h-11 w-11 items-center justify-center rounded-full font-semibold text-bg ${
-                      celebrating === goal.id ? 'animate-check-bounce' : ''
-                    }`}
-                    style={{ backgroundColor: goal.color }}
-                  >
-                    +1
-                  </button>
+                  <ProgressRing progress={count / target} color={goal.color} size={52}>
+                    <button
+                      type="button"
+                      onClick={() => void adjustCounter(goal, 1)}
+                      className={`flex h-11 w-11 items-center justify-center rounded-full font-semibold text-bg ${
+                        celebrating === goal.id ? 'animate-check-bounce' : ''
+                      }`}
+                      style={{ backgroundColor: goal.color }}
+                    >
+                      +1
+                    </button>
+                  </ProgressRing>
                 </span>
                 {celebrating === goal.id && <Confetti />}
                 {flash?.id === goal.id && (

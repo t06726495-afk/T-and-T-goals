@@ -28,3 +28,25 @@ export function lastSevenDays(completedDates: Set<string>, today: string) {
   }
   return days
 }
+
+// Same window, but with a 0..1 fraction per day so counter goals can render
+// proportional bars ("half the pages") instead of a binary dot. Checkbox
+// goals collapse to 0 or 1.
+export function lastSevenDayFractions(
+  logs: Map<string, { count: number; completed: boolean }> | undefined,
+  today: string,
+  target: number | null,
+) {
+  const days: { date: string; fraction: number; done: boolean }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const date = shiftDate(today, -i)
+    const log = logs?.get(date)
+    const done = log?.completed ?? false
+    let fraction = done ? 1 : 0
+    if (target && target > 0 && log) {
+      fraction = Math.max(0, Math.min(1, log.count / target))
+    }
+    days.push({ date, fraction, done })
+  }
+  return days
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { todayInTimezone } from '../lib/date'
-import { currentStreak, lastSevenDays } from '../lib/streak'
+import { currentStreak, lastSevenDayFractions } from '../lib/streak'
 import { GoalFormSheet } from '../components/GoalFormSheet'
 import { YearGridModal } from '../components/YearGridModal'
 import { BenchmarkFormSheet } from '../components/BenchmarkFormSheet'
@@ -17,7 +17,7 @@ export function GoalsPage() {
   const [myGoals, setMyGoals] = useState<Goal[]>([])
   const [partnerGoals, setPartnerGoals] = useState<Goal[]>([])
   const [partner, setPartner] = useState<Profile | null>(null)
-  const [logsByGoal, setLogsByGoal] = useState<Map<string, Set<string>>>(new Map())
+  const [logsByGoal, setLogsByGoal] = useState<Map<string, Map<string, GoalLog>>>(new Map())
   const [myBenchmarks, setMyBenchmarks] = useState<Benchmark[]>([])
   const [partnerBenchmarks, setPartnerBenchmarks] = useState<Benchmark[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,11 +69,12 @@ export function GoalsPage() {
         .in('goal_id', goalIds)
         .gte('log_date', cutoff.toISOString().slice(0, 10))
 
-      const map = new Map<string, Set<string>>()
+      // Keep the full log (not just completed dates) so counter goals can
+      // render proportional week bars, not just done/not-done dots.
+      const map = new Map<string, Map<string, GoalLog>>()
       for (const log of (logs as GoalLog[] | null) ?? []) {
-        if (!log.completed) continue
-        if (!map.has(log.goal_id)) map.set(log.goal_id, new Set())
-        map.get(log.goal_id)!.add(log.log_date)
+        if (!map.has(log.goal_id)) map.set(log.goal_id, new Map())
+        map.get(log.goal_id)!.set(log.log_date, log)
       }
       setLogsByGoal(map)
     } else {
@@ -139,7 +140,7 @@ export function GoalsPage() {
               key={goal.id}
               goal={goal}
               today={today}
-              completedDates={logsByGoal.get(goal.id) ?? new Set()}
+              logs={logsByGoal.get(goal.id)}
               onClick={() => setViewingGoal(goal)}
               onEdit={() => setEditingGoal(goal)}
             />
@@ -158,7 +159,7 @@ export function GoalsPage() {
                 key={goal.id}
                 goal={goal}
                 today={today}
-                completedDates={logsByGoal.get(goal.id) ?? new Set()}
+                logs={logsByGoal.get(goal.id)}
                 readOnly
                 onClick={() => setViewingGoal(goal)}
               />
@@ -342,23 +343,32 @@ function BenchmarkCard({
   )
 }
 
+const WEEK_BAR_HEIGHT = 22
+
 function GoalCard({
   goal,
   today,
-  completedDates,
+  logs,
   readOnly,
   onClick,
   onEdit,
 }: {
   goal: Goal
   today: string
-  completedDates: Set<string>
+  logs?: Map<string, GoalLog>
   readOnly?: boolean
   onClick?: () => void
   onEdit?: () => void
 }) {
+  const completedDates = new Set(
+    [...(logs?.values() ?? [])].filter((l) => l.completed).map((l) => l.log_date),
+  )
   const streak = currentStreak(completedDates, today)
-  const week = lastSevenDays(completedDates, today)
+  const week = lastSevenDayFractions(
+    logs,
+    today,
+    goal.kind === 'counter' ? goal.target_per_day : null,
+  )
 
   return (
     <div
@@ -397,15 +407,24 @@ function GoalCard({
         )}
       </div>
 
-      <div className="mt-3 flex gap-1">
+      {/* Counter goals get proportional-height bars (how much of the day's
+          target was hit); checkbox goals collapse to full-or-empty. */}
+      <div className="mt-3 flex items-end gap-1" style={{ height: WEEK_BAR_HEIGHT }}>
         {week.map((d) => (
           <span
             key={d.date}
-            className="h-2 flex-1 rounded-full"
-            style={{
-              backgroundColor: d.done ? goal.color : 'var(--color-border)',
-            }}
-          />
+            className="relative flex-1 overflow-hidden rounded-md bg-border"
+            style={{ height: WEEK_BAR_HEIGHT }}
+          >
+            <span
+              className="absolute bottom-0 left-0 w-full rounded-md transition-all duration-500"
+              style={{
+                height: `${d.fraction * 100}%`,
+                backgroundColor: goal.color,
+                opacity: d.done ? 1 : 0.75,
+              }}
+            />
+          </span>
         ))}
       </div>
     </div>

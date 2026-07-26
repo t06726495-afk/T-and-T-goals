@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { todayInTimezone } from '../lib/date'
-import { currentStreak, lastSevenDays } from '../lib/streak'
+import { currentStreak, lastSevenDayFractions } from '../lib/streak'
 import type { Goal, GoalLog, Profile } from '../lib/types'
 
 const STREAK_LOOKBACK_DAYS = 60
@@ -11,7 +11,7 @@ export function PartnerPage() {
   const { profile } = useAuth()
   const [partner, setPartner] = useState<Profile | null>(null)
   const [goals, setGoals] = useState<Goal[]>([])
-  const [logsByGoal, setLogsByGoal] = useState<Map<string, Set<string>>>(new Map())
+  const [logsByGoal, setLogsByGoal] = useState<Map<string, Map<string, GoalLog>>>(new Map())
   const [loading, setLoading] = useState(true)
 
   const today = profile ? todayInTimezone(profile.timezone) : new Date().toISOString().slice(0, 10)
@@ -48,11 +48,10 @@ export function PartnerPage() {
         )
         .gte('log_date', cutoff.toISOString().slice(0, 10))
 
-      const map = new Map<string, Set<string>>()
+      const map = new Map<string, Map<string, GoalLog>>()
       for (const log of (logs as GoalLog[] | null) ?? []) {
-        if (!log.completed) continue
-        if (!map.has(log.goal_id)) map.set(log.goal_id, new Set())
-        map.get(log.goal_id)!.add(log.log_date)
+        if (!map.has(log.goal_id)) map.set(log.goal_id, new Map())
+        map.get(log.goal_id)!.set(log.log_date, log)
       }
       setLogsByGoal(map)
     } else {
@@ -91,9 +90,16 @@ export function PartnerPage() {
 
           <div className="mt-4 space-y-3">
             {goals.map((goal) => {
-              const completedDates = logsByGoal.get(goal.id) ?? new Set<string>()
+              const logs = logsByGoal.get(goal.id)
+              const completedDates = new Set(
+                [...(logs?.values() ?? [])].filter((l) => l.completed).map((l) => l.log_date),
+              )
               const streak = currentStreak(completedDates, today)
-              const week = lastSevenDays(completedDates, today)
+              const week = lastSevenDayFractions(
+                logs,
+                today,
+                goal.kind === 'counter' ? goal.target_per_day : null,
+              )
               return (
                 <div key={goal.id} className="rounded-2xl border border-partner/20 bg-surface p-4">
                   <div className="flex items-center gap-3">
@@ -107,13 +113,22 @@ export function PartnerPage() {
                       )}
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-1">
+                  <div className="mt-3 flex items-end gap-1" style={{ height: 22 }}>
                     {week.map((d) => (
                       <span
                         key={d.date}
-                        className="h-2 flex-1 rounded-full"
-                        style={{ backgroundColor: d.done ? goal.color : 'var(--color-border)' }}
-                      />
+                        className="relative flex-1 overflow-hidden rounded-md bg-border"
+                        style={{ height: 22 }}
+                      >
+                        <span
+                          className="absolute bottom-0 left-0 w-full rounded-md transition-all duration-500"
+                          style={{
+                            height: `${d.fraction * 100}%`,
+                            backgroundColor: goal.color,
+                            opacity: d.done ? 1 : 0.75,
+                          }}
+                        />
+                      </span>
                     ))}
                   </div>
                 </div>
