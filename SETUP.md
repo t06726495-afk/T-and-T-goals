@@ -355,10 +355,30 @@ While you're there, set your **daily reminder** time and **quiet hours**. A
 nudge sent during her quiet hours is held and delivered when they end — never
 dropped.
 
+## 20. Get a Groq API key (for the AI planner)
+
+1. Go to [console.groq.com](https://console.groq.com) and sign up (free —
+   Google/GitHub sign-in works).
+2. In the left sidebar click **API Keys** → **Create API Key**.
+3. Name it anything, click Submit, and **copy the key immediately**
+   (starts with `gsk_`) — Groq won't show it again.
+4. In Vercel → **Settings → Environments → Production**, add:
+   - `GROQ_API_KEY` = the key you copied
+5. **Deployments → ⋯ → Redeploy**.
+
+Groq's free tier is roughly 30 requests per minute and about 1,000 per day
+for the whole account. Two people generating the occasional plan won't come
+close. If you ever do hit it, the app shows a "give it a minute" message
+rather than an error page.
+
+> The key lives only in Vercel's server-side environment. It is never sent
+> to the browser — the app calls your own `/api/plan` endpoint, which calls
+> Groq on the server.
+
 ## What's next
 
-Phase 7 adds the AI planner, and Phase 8 is polish (offline caching, empty
-states, animation passes).
+Phase 8 is polish: offline caching, animation passes, and any rough edges
+you've spotted along the way.
 
 ## Notes on `npm audit`
 

@@ -8,8 +8,8 @@ import { TodayPage } from './pages/TodayPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { PartnerPage } from './pages/PartnerPage'
 import { PointsPage } from './pages/PointsPage'
+import { PlannerPage } from './pages/PlannerPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { ComingSoonPage } from './pages/ComingSoonPage'
 
 function NotConfiguredScreen() {
   return (
@@ -73,10 +73,7 @@ function AuthGate() {
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/partner" element={<PartnerPage />} />
           <Route path="/points" element={<PointsPage />} />
-          <Route
-            path="/planner"
-            element={<ComingSoonPage title="Planner" phase="Arriving in Phase 7." />}
-          />
+          <Route path="/planner" element={<PlannerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
