@@ -180,22 +180,19 @@ export function TodayPage() {
       setTimeout(() => setFlash(null), 1200)
     }
 
-    // Mirror completion into goal_logs for the year grid (Phase 4), without
-    // double-awarding points — the checkbox goal_logs trigger always sets
-    // points_awarded to 0 since the task above is the real scoring event.
-    if (task.goal_id) {
-      await supabase.from('goal_logs').upsert(
-        {
-          goal_id: task.goal_id,
-          owner_id: profile!.id,
-          log_date: today,
-          completed: nextDone,
-          count: nextDone ? 1 : 0,
-        },
-        { onConflict: 'goal_id,log_date' },
-      )
+    // The parent goal is crossed off by a database trigger, and only once
+    // EVERY task linked to it that day is done — one set of squats doesn't
+    // finish "get stronger". So read back what the trigger decided rather
+    // than assuming this tick completed the goal.
+    if (task.goal_id && nextDone) {
+      const { data: log } = await supabase
+        .from('goal_logs')
+        .select('completed')
+        .eq('goal_id', task.goal_id)
+        .eq('log_date', today)
+        .maybeSingle()
 
-      if (nextDone) {
+      if ((log as { completed: boolean } | null)?.completed) {
         void announceGoalProgress(task.goal_id)
       }
     }
@@ -315,6 +312,17 @@ export function TodayPage() {
     tod,
     items: tasks.filter((t) => t.time_of_day === tod),
   })).filter((g) => g.items.length > 0)
+
+  // Goals the planner split into several tasks for today. Shown only when
+  // there's more than one, because that's exactly the case where "the goal
+  // is done" isn't obvious from ticking a single row.
+  const goalProgress = [...new Set(tasks.map((t) => t.goal_id).filter(Boolean))]
+    .map((goalId) => {
+      const goal = goalsById.get(goalId as string)
+      const items = tasks.filter((t) => t.goal_id === goalId)
+      return { goal, done: items.filter((t) => t.done).length, total: items.length }
+    })
+    .filter((entry) => entry.goal?.kind === 'checkbox' && entry.total > 1)
 
   const hasNothing = tasks.length === 0 && counterGoals.length === 0
 
@@ -490,6 +498,37 @@ export function TodayPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {goalProgress.length > 0 && (
+        <div className="-mx-4 mt-6 overflow-x-auto px-4">
+          <div className="flex w-max gap-2">
+            {goalProgress.map(({ goal, done, total }) => {
+              const complete = done === total
+              return (
+                <div
+                  key={goal!.id}
+                  className="flex items-center gap-2 rounded-full border px-3 py-2"
+                  style={{
+                    borderColor: complete ? goal!.color : 'var(--color-border)',
+                    backgroundColor: complete
+                      ? `${goal!.color}1f`
+                      : 'var(--color-surface)',
+                  }}
+                >
+                  <span className="text-base">{goal!.emoji}</span>
+                  <span className="text-sm text-ink">{goal!.title}</span>
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: complete ? goal!.color : 'var(--color-ink-dim)' }}
+                  >
+                    {complete ? '✓ done' : `${done}/${total}`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

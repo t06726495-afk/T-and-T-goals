@@ -12,11 +12,28 @@ import {
 interface Settings {
   quiet_hours_start: string | null
   quiet_hours_end: string | null
-  daily_reminder_time: string | null
 }
+
+interface Reminder {
+  id: string
+  at: string
+  label: string | null
+}
+
+const MAX_REMINDERS = 6
 
 function trimTime(value: string | null): string {
   return value ? value.slice(0, 5) : ''
+}
+
+// Suggest a time that isn't taken yet, so "Add a reminder" lands on something
+// usable instead of colliding with an existing row.
+function suggestTime(existing: Reminder[]): string {
+  const taken = new Set(existing.map((r) => trimTime(r.at)))
+  for (const candidate of ['09:00', '13:00', '18:00', '21:00', '07:00', '15:00']) {
+    if (!taken.has(candidate)) return candidate
+  }
+  return '12:00'
 }
 
 export function NotificationSettings() {
@@ -27,8 +44,8 @@ export function NotificationSettings() {
   const [settings, setSettings] = useState<Settings>({
     quiet_hours_start: null,
     quiet_hours_end: null,
-    daily_reminder_time: null,
   })
+  const [reminders, setReminders] = useState<Reminder[]>([])
   const [saved, setSaved] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -39,17 +56,33 @@ export function NotificationSettings() {
     void refresh()
   }, [refresh])
 
+  const profileId = profile?.id
+
   useEffect(() => {
-    if (!profile) return
+    if (!profileId) return
     supabase
       .from('user_settings')
-      .select('quiet_hours_start, quiet_hours_end, daily_reminder_time')
-      .eq('profile_id', profile.id)
+      .select('quiet_hours_start, quiet_hours_end')
+      .eq('profile_id', profileId)
       .maybeSingle()
       .then(({ data }) => {
         if (data) setSettings(data as Settings)
       })
-  }, [profile])
+  }, [profileId])
+
+  const loadReminders = useCallback(async () => {
+    if (!profileId) return
+    const { data } = await supabase
+      .from('reminders')
+      .select('id, at, label')
+      .eq('profile_id', profileId)
+      .order('at', { ascending: true })
+    setReminders((data as Reminder[] | null) ?? [])
+  }, [profileId])
+
+  useEffect(() => {
+    void loadReminders()
+  }, [loadReminders])
 
   async function handleEnable() {
     if (!profile) return
@@ -83,14 +116,54 @@ export function NotificationSettings() {
         profile_id: profile.id,
         quiet_hours_start: next.quiet_hours_start || null,
         quiet_hours_end: next.quiet_hours_end || null,
-        daily_reminder_time: next.daily_reminder_time || null,
       },
       { onConflict: 'profile_id' },
     )
     if (!writeError) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 1500)
+      flashSaved()
     }
+  }
+
+  function flashSaved() {
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  async function addReminder() {
+    if (!profile) return
+    setError('')
+    const { error: writeError } = await supabase
+      .from('reminders')
+      .insert({ profile_id: profile.id, at: suggestTime(reminders) })
+    if (writeError) {
+      setError(writeError.message)
+      return
+    }
+    await loadReminders()
+    flashSaved()
+  }
+
+  async function updateReminder(id: string, patch: Partial<Reminder>) {
+    setError('')
+    // Optimistic so the time picker doesn't snap back while the write is in
+    // flight; a failure reloads the real values.
+    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    const { error: writeError } = await supabase.from('reminders').update(patch).eq('id', id)
+    if (writeError) {
+      setError(
+        writeError.code === '23505'
+          ? 'You already have a reminder at that time.'
+          : writeError.message,
+      )
+      await loadReminders()
+      return
+    }
+    flashSaved()
+  }
+
+  async function removeReminder(id: string) {
+    setReminders((prev) => prev.filter((r) => r.id !== id))
+    await supabase.from('reminders').delete().eq('id', id)
   }
 
   return (
@@ -167,20 +240,63 @@ export function NotificationSettings() {
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
 
       <div className="mt-5 border-t border-border pt-4">
-        <label className="block text-sm text-ink-dim">
-          Daily reminder
-          <input
-            type="time"
-            value={trimTime(settings.daily_reminder_time)}
-            onChange={(e) =>
-              void saveSettings({ ...settings, daily_reminder_time: e.target.value || null })
-            }
-            className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
-          />
-          <span className="mt-1 block text-xs text-ink-dim">
-            Only sent if you still have something left that day.
-          </span>
-        </label>
+        <p className="text-sm text-ink-dim">Daily reminders</p>
+
+        <div className="mt-2 space-y-2">
+          {reminders.map((reminder) => (
+            <div key={reminder.id} className="flex items-center gap-2">
+              <input
+                type="time"
+                value={trimTime(reminder.at)}
+                onChange={(e) => {
+                  if (e.target.value) void updateReminder(reminder.id, { at: e.target.value })
+                }}
+                className="min-h-11 w-28 shrink-0 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
+              />
+              <input
+                type="text"
+                value={reminder.label ?? ''}
+                placeholder="Label (optional)"
+                maxLength={40}
+                onChange={(e) =>
+                  setReminders((prev) =>
+                    prev.map((r) => (r.id === reminder.id ? { ...r, label: e.target.value } : r)),
+                  )
+                }
+                onBlur={(e) => void updateReminder(reminder.id, { label: e.target.value || null })}
+                className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink placeholder:text-ink-dim focus:border-mine focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void removeReminder(reminder.id)}
+                aria-label="Remove reminder"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border text-ink-dim"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {reminders.length < MAX_REMINDERS ? (
+          <button
+            type="button"
+            onClick={() => void addReminder()}
+            className="mt-2 min-h-11 w-full rounded-xl border border-dashed border-border px-4 py-2 text-sm font-medium text-ink-dim"
+          >
+            + Add a reminder
+          </button>
+        ) : (
+          <p className="mt-2 text-xs text-ink-dim">
+            That's the maximum of {MAX_REMINDERS}. Remove one to add another.
+          </p>
+        )}
+
+        <p className="mt-2 text-xs text-ink-dim">
+          {reminders.length === 0
+            ? 'No reminders yet. Add as many as you want through the day.'
+            : 'Each one is only sent if you still have something left that day.'}
+        </p>
 
         <p className="mt-4 text-sm text-ink-dim">Quiet hours</p>
         <div className="mt-1 flex items-center gap-2">

@@ -4,10 +4,11 @@ import { adminClient, sendToProfile, requireEnv } from '../_lib/push.js'
 // Hit on a schedule by GitHub Actions (see .github/workflows/reminders.yml).
 // Two jobs:
 //   1. Flush nudges that were queued behind the recipient's quiet hours.
-//   2. Send each person's daily reminder once their chosen local time has
-//      passed.
+//   2. Send each of a person's daily reminders once its chosen local time
+//      has passed.
 // Runs frequently (every 15 min) because "9am" means a different instant in
-// every timezone; last_reminder_on keeps it to one send per local day.
+// every timezone; reminders.last_sent_on keeps each one to a single send per
+// local day.
 //
 // Also doubles as the Supabase keepalive — a free project auto-pauses after
 // 7 days with no activity, and this touches the database continuously.
@@ -51,14 +52,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // --- 2. Daily reminders ------------------------------------------------
-    const { data: settings } = await admin
-      .from('user_settings')
-      .select('profile_id, daily_reminder_time, last_reminder_on, profiles(timezone, display_name)')
-      .not('daily_reminder_time', 'is', null)
+    // One row per reminder, so a person can have several a day. Each row
+    // carries its own last_sent_on, which keeps every reminder to a single
+    // send per local day without them blocking one another.
+    const { data: reminders } = await admin
+      .from('reminders')
+      .select('id, profile_id, at, label, last_sent_on, profiles(timezone)')
+      .eq('is_active', true)
 
     let remindersSent = 0
-    for (const row of settings ?? []) {
-      const profile = row.profiles as unknown as { timezone: string; display_name: string } | null
+    // Someone with three reminders due in the same run shouldn't cost three
+    // identical open-task queries.
+    const openCounts = new Map<string, number>()
+
+    for (const row of reminders ?? []) {
+      const profileId = row.profile_id as string
+      const profile = row.profiles as unknown as { timezone: string } | null
       const tz = profile?.timezone || 'UTC'
 
       const localDate = new Intl.DateTimeFormat('en-CA', {
@@ -68,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         day: '2-digit',
       }).format(new Date())
 
-      if (row.last_reminder_on === localDate) continue
+      if (row.last_sent_on === localDate) continue
 
       const localTime = new Intl.DateTimeFormat('en-GB', {
         timeZone: tz,
@@ -77,35 +86,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         hour12: false,
       }).format(new Date())
 
-      const target = String(row.daily_reminder_time).slice(0, 5)
+      const target = String(row.at).slice(0, 5)
       if (localTime < target) continue
 
-      // Skip if there's nothing left to do today — a reminder for an
-      // already-finished day is just noise.
-      const { count: openTasks } = await admin
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .eq('owner_id', row.profile_id as string)
-        .eq('task_date', localDate)
-        .eq('done', false)
+      const cacheKey = `${profileId}:${localDate}`
+      let openTasks = openCounts.get(cacheKey)
+      if (openTasks === undefined) {
+        // Skip if there's nothing left to do today — a reminder for an
+        // already-finished day is just noise.
+        const { count } = await admin
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('owner_id', profileId)
+          .eq('task_date', localDate)
+          .eq('done', false)
+        openTasks = count ?? 0
+        openCounts.set(cacheKey, openTasks)
+      }
 
-      if ((openTasks ?? 0) > 0) {
-        const result = await sendToProfile(admin, row.profile_id as string, {
-          title: 'mogging',
-          body:
-            openTasks === 1
-              ? '1 thing left today'
-              : `${openTasks} things left today`,
+      if (openTasks > 0) {
+        const label = (row.label as string | null)?.trim()
+        const result = await sendToProfile(admin, profileId, {
+          title: label || 'mogging',
+          body: openTasks === 1 ? '1 thing left today' : `${openTasks} things left today`,
           url: '/',
+          // Same tag for all of them: a later reminder should replace the
+          // earlier notification rather than stack up on the lock screen.
           tag: 'daily-reminder',
         })
         remindersSent += result.sent
       }
 
       await admin
-        .from('user_settings')
-        .update({ last_reminder_on: localDate })
-        .eq('profile_id', row.profile_id as string)
+        .from('reminders')
+        .update({ last_sent_on: localDate })
+        .eq('id', row.id as string)
     }
 
     res.status(200).json({ ok: true, nudgesSent, remindersSent })

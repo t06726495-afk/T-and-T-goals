@@ -388,6 +388,20 @@ prep steps) alongside each habit, which needs one more column.
    alter table public.tasks add column if not exists notes text;
    ```
 
+## 22. Run the polish migrations
+
+Two more files, in this order. Same routine each time: Supabase →
+**SQL Editor → New query** → paste the whole file → **Run**.
+
+1. `supabase/migrations/20260802000000_points_records.sql` — adds the
+   "days in a row" and "goal completion %" records to the Points screen.
+2. `supabase/migrations/20260803000000_reminders_and_goal_sync.sql` — lets
+   you set several daily reminders instead of just one, and makes a goal
+   cross itself off only once **every** task linked to it that day is done.
+
+The second one carries your existing single reminder time over
+automatically, so you won't lose the reminder you already had.
+
 ## What's next
 
 Phase 8 is polish: offline caching, animation passes, and any rough edges
