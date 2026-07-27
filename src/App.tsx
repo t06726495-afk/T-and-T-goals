@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { isSupabaseConfigured } from './lib/supabase'
 import { NavBar } from './components/NavBar'
+import { OfflineBanner } from './components/OfflineBanner'
 import { LoginPage } from './pages/LoginPage'
 import { TodayPage } from './pages/TodayPage'
 import { GoalsPage } from './pages/GoalsPage'
@@ -50,6 +51,7 @@ function ServiceWorkerNavigation() {
 
 function AuthGate() {
   const { session, loading } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -67,7 +69,9 @@ function AuthGate() {
     <>
       <ServiceWorkerNavigation />
       <NavBar />
-      <main className="safe-x safe-bottom">
+      <OfflineBanner />
+      {/* Keyed on the route so the enter animation replays per screen. */}
+      <main key={location.pathname} className="safe-x safe-bottom page-enter">
         <Routes>
           <Route path="/" element={<TodayPage />} />
           <Route path="/goals" element={<GoalsPage />} />

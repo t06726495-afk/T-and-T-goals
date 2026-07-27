@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { formatValue, parseValue, benchmarkProgress, remainingLabel, isAchieved } from '../lib/benchmarks'
 import { PointsChart, type ChartSeries } from './PointsChart'
 import { Confetti } from './Confetti'
+import { haptic } from '../lib/motion'
 import type { Benchmark, BenchmarkEntry } from '../lib/types'
 
 export function BenchmarkDetailModal({
@@ -84,7 +85,7 @@ export function BenchmarkDetailModal({
       const updated = fresh as Benchmark
       setCurrent(updated)
       if (!wasAchieved && isAchieved(updated)) {
-        if (navigator.vibrate) navigator.vibrate([15, 40, 25])
+        haptic('celebrate')
         setCelebrate(true)
         setTimeout(() => setCelebrate(false), 2500)
       }

@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import type { CoupleInfo, Profile } from '../lib/types'
+import type { CoupleInfo, Goal, Profile } from '../lib/types'
 import { EMOJI_CHOICES, COLOR_CHOICES } from '../lib/pickers'
 import { NotificationSettings } from '../components/NotificationSettings'
+import { exportMyData, downloadJson } from '../lib/export'
 
 export function SettingsPage() {
   const { profile, refreshProfile, signOut } = useAuth()
@@ -18,9 +19,9 @@ export function SettingsPage() {
 
       <NotificationSettings />
 
-      <div className="mt-8 rounded-2xl border border-border bg-surface p-4 text-sm text-ink-dim">
-        Data export arrives in a later phase.
-      </div>
+      {profile && <ArchivedGoalsCard profileId={profile.id} />}
+
+      {profile && <DataCard profileId={profile.id} />}
 
       <button
         type="button"
@@ -29,6 +30,8 @@ export function SettingsPage() {
       >
         Sign out
       </button>
+
+      <p className="mt-6 text-center text-xs text-ink-dim">mogging</p>
     </div>
   )
 }
@@ -248,6 +251,122 @@ function PairingCard() {
       )}
 
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+    </section>
+  )
+}
+
+function ArchivedGoalsCard({ profileId }: { profileId: string }) {
+  const [archived, setArchived] = useState<Goal[]>([])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState('')
+
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('owner_id', profileId)
+      .eq('is_active', false)
+      .order('archived_at', { ascending: false })
+    setArchived((data as Goal[]) ?? [])
+  }, [profileId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function restore(goal: Goal) {
+    setBusy(goal.id)
+    await supabase
+      .from('goals')
+      .update({ is_active: true, archived_at: null })
+      .eq('id', goal.id)
+    // Its daily template was deactivated on archive; bring that back too, or
+    // the goal would reappear on Goals but never generate tasks again.
+    await supabase
+      .from('task_templates')
+      .update({ is_active: true })
+      .eq('goal_id', goal.id)
+      .eq('owner_id', profileId)
+    setBusy('')
+    await load()
+  }
+
+  if (archived.length === 0) return null
+
+  return (
+    <section className="mt-6 rounded-2xl border border-border bg-surface p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="font-medium text-ink">Archived goals</span>
+        <span className="text-sm text-ink-dim">
+          {archived.length} {open ? '▴' : '▾'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-2">
+          {archived.map((g) => (
+            <div
+              key={g.id}
+              className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-3"
+            >
+              <span className="text-lg">{g.emoji}</span>
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">{g.title}</span>
+              <button
+                type="button"
+                onClick={() => void restore(g)}
+                disabled={busy === g.id}
+                className="min-h-11 shrink-0 rounded-xl border border-border px-3 py-2 text-xs font-medium text-ink-dim disabled:opacity-50"
+              >
+                {busy === g.id ? '…' : 'Restore'}
+              </button>
+            </div>
+          ))}
+          <p className="text-xs text-ink-dim">
+            Archiving never deletes history — restoring brings back the full
+            record.
+          </p>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function DataCard({ profileId }: { profileId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleExport() {
+    setBusy(true)
+    setError('')
+    try {
+      const data = await exportMyData(profileId)
+      downloadJson(data, `mogging-export-${new Date().toISOString().slice(0, 10)}.json`)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl border border-border bg-surface p-4">
+      <h2 className="font-medium text-ink">Your data</h2>
+      <p className="mt-1 text-sm text-ink-dim">
+        Download everything you've logged as a JSON file — goals, history,
+        benchmarks, and nudges.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleExport()}
+        disabled={busy}
+        className="mt-3 min-h-11 w-full rounded-xl border border-border px-4 py-2 font-medium text-ink disabled:opacity-60"
+      >
+        {busy ? 'Preparing…' : 'Export my data'}
+      </button>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
   )
 }

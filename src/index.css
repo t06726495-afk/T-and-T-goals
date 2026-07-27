@@ -144,3 +144,26 @@
     transition: none;
   }
 }
+
+/* Subtle rise on screen change so navigation feels like movement rather
+   than an instant swap. Keyed off the route in App so it replays per page. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.page-enter {
+  animation: page-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}

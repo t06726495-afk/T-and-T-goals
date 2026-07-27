@@ -1,11 +1,26 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
+import {
+  precacheAndRoute,
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+} from 'workbox-precaching'
+import { NavigationRoute, registerRoute } from 'workbox-routing'
 
 declare const self: ServiceWorkerGlobalScope
 
 // Injected at build time by vite-plugin-pwa (injectManifest strategy).
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
+
+// Serve the cached shell for any in-app navigation, so opening the app
+// offline works on /goals or /points, not just /. API calls are excluded —
+// they need the network and should fail honestly rather than being handed
+// an HTML page.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('index.html'), {
+    denylist: [/^\/api\//],
+  }),
+)
 
 self.addEventListener('install', () => {
   void self.skipWaiting()

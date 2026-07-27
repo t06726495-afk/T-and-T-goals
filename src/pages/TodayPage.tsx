@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { ensureTodaysTasks } from '../lib/recurrence'
 import { timeOfDayLabel } from '../lib/date'
 import { levelProgress } from '../lib/levels'
+import { haptic } from '../lib/motion'
 import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
 import { AnimatedCheck } from '../components/AnimatedCheck'
@@ -141,7 +142,7 @@ export function TodayPage() {
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done: nextDone } : t)))
 
     if (nextDone) {
-      if (navigator.vibrate) navigator.vibrate(15)
+      haptic('done')
       setCelebrating(task.id)
       setTimeout(() => setCelebrating(null), 650)
     }
@@ -234,6 +235,7 @@ export function TodayPage() {
     setCounterLogs((prev) => new Map(prev).set(goal.id, optimistic))
 
     if (justHitTarget) {
+      haptic('celebrate')
       setCelebrating(goal.id)
       setTimeout(() => setCelebrating(null), 650)
     }
@@ -272,7 +274,7 @@ export function TodayPage() {
   }
 
   async function adjustCounter(goal: Goal, delta: number) {
-    if (delta > 0 && navigator.vibrate) navigator.vibrate(10)
+    if (delta > 0) haptic('tick')
     const existing = counterLogs.get(goal.id)
     await commitCounter(goal, (existing?.count ?? 0) + delta)
   }
