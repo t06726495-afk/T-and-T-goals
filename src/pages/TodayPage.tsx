@@ -33,6 +33,7 @@ export function TodayPage() {
   const [editingCount, setEditingCount] = useState<string | null>(null)
   const [editingCountValue, setEditingCountValue] = useState('')
   const [nudging, setNudging] = useState(false)
+  const [expandedTask, setExpandedTask] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -499,8 +500,35 @@ export function TodayPage() {
                       {task.title}
                     </span>
                   </span>
+                  {task.notes && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Show details"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedTask((prev) => (prev === task.id ? null : task.id))
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setExpandedTask((prev) => (prev === task.id ? null : task.id))
+                        }
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-dim"
+                    >
+                      {expandedTask === task.id ? '▴' : '▾'}
+                    </span>
+                  )}
                   {celebrating === task.id && <Confetti />}
                 </button>
+
+                {task.notes && expandedTask === task.id && (
+                  <p className="mt-1 whitespace-pre-line rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm text-ink-dim">
+                    {task.notes}
+                  </p>
+                )}
                 {flash?.id === task.id && (
                   <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
                     +{flash.points}

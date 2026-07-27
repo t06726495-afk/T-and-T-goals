@@ -13,6 +13,7 @@ const TIMES_OF_DAY = ['morning', 'afternoon', 'evening', 'any'] as const
 
 export interface PlanTemplate {
   title: string
+  notes: string | null
   goal_id: string | null
   difficulty: (typeof DIFFICULTIES)[number]
   days_of_week: number[]
@@ -34,21 +35,71 @@ function stripFences(raw: string): string {
   return text.trim()
 }
 
+const DAY_NAMES: Record<string, number> = {
+  sun: 0, sunday: 0,
+  mon: 1, monday: 1,
+  tue: 2, tues: 2, tuesday: 2,
+  wed: 3, weds: 3, wednesday: 3,
+  thu: 4, thur: 4, thurs: 4, thursday: 4,
+  fri: 5, friday: 5,
+  sat: 6, saturday: 6,
+}
+
+// Accepts 3, "3", "Wednesday", "Wed" — models are inconsistent about this
+// and dropping the template over it would lose an otherwise good plan.
+function coerceDay(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 6) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase()
+    if (trimmed in DAY_NAMES) return DAY_NAMES[trimmed]
+    const n = Number(trimmed)
+    if (Number.isInteger(n) && n >= 0 && n <= 6) return n
+  }
+  return null
+}
+
+function coerceString(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, max) : null
+}
+
 // Hand-written validator rather than a schema library — keeps the dependency
 // count down and lets each field be coerced to something safe instead of
-// rejecting an otherwise-usable plan over one bad value.
-function validatePlan(parsed: unknown, validGoalIds: Set<string>): PlanTemplate[] | null {
+// rejecting an otherwise-usable plan over one bad value. Deliberately
+// forgiving: the user reviews and edits everything before it's saved, so a
+// slightly-off default costs far less than an outright failure.
+function validatePlan(
+  parsed: unknown,
+  validGoalIds: Set<string>,
+): { templates: PlanTemplate[]; tips: string[] } | null {
   if (typeof parsed !== 'object' || parsed === null) return null
-  const templates = (parsed as { templates?: unknown }).templates
-  if (!Array.isArray(templates)) return null
+  const root = parsed as Record<string, unknown>
 
-  const out: PlanTemplate[] = []
-  for (const item of templates) {
+  // Accept several plausible shapes for the list itself.
+  const rawList =
+    (Array.isArray(root.templates) && root.templates) ||
+    (Array.isArray(root.plan) && root.plan) ||
+    (Array.isArray(root.habits) && root.habits) ||
+    (Array.isArray(parsed) ? (parsed as unknown[]) : null)
+
+  if (!rawList) return null
+
+  const templates: PlanTemplate[] = []
+  for (const item of rawList) {
     if (typeof item !== 'object' || item === null) continue
     const t = item as Record<string, unknown>
 
-    const title = typeof t.title === 'string' ? t.title.trim().slice(0, 120) : ''
+    const title =
+      coerceString(t.title, 120) ?? coerceString(t.name, 120) ?? coerceString(t.habit, 120)
     if (!title) continue
+
+    const notes =
+      coerceString(t.notes, 600) ??
+      coerceString(t.details, 600) ??
+      coerceString(t.description, 600)
 
     const difficulty = DIFFICULTIES.includes(t.difficulty as never)
       ? (t.difficulty as PlanTemplate['difficulty'])
@@ -58,40 +109,88 @@ function validatePlan(parsed: unknown, validGoalIds: Set<string>): PlanTemplate[
       ? (t.time_of_day as PlanTemplate['time_of_day'])
       : 'any'
 
-    const days = Array.isArray(t.days_of_week)
-      ? [...new Set(t.days_of_week.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
-      : []
-    if (days.length === 0) continue
+    const rawDays = Array.isArray(t.days_of_week)
+      ? t.days_of_week
+      : Array.isArray(t.days)
+        ? t.days
+        : []
+    const days = [...new Set(rawDays.map(coerceDay).filter((d): d is number => d !== null))].sort()
+
+    // An unparseable schedule shouldn't kill the row — default to every day
+    // and let the user uncheck what they don't want in the preview.
+    const finalDays = days.length > 0 ? days : [0, 1, 2, 3, 4, 5, 6]
 
     // Never trust a model-supplied foreign key: only accept goal ids that
     // actually belong to this user.
-    const goalId =
-      typeof t.goal_id === 'string' && validGoalIds.has(t.goal_id) ? t.goal_id : null
+    const goalId = typeof t.goal_id === 'string' && validGoalIds.has(t.goal_id) ? t.goal_id : null
 
-    out.push({ title, goal_id: goalId, difficulty, days_of_week: days.sort(), time_of_day: timeOfDay })
-    if (out.length >= 20) break
+    templates.push({
+      title,
+      notes,
+      goal_id: goalId,
+      difficulty,
+      days_of_week: finalDays,
+      time_of_day: timeOfDay,
+    })
+    if (templates.length >= 20) break
   }
 
-  return out.length > 0 ? out : null
+  if (templates.length === 0) return null
+
+  const tips = Array.isArray(root.tips)
+    ? root.tips
+        .map((tip) => coerceString(tip, 240))
+        .filter((tip): tip is string => tip !== null)
+        .slice(0, 6)
+    : []
+
+  return { templates, tips }
 }
 
-const SYSTEM_PROMPT = `You design realistic daily habit plans.
+const SYSTEM_PROMPT = `You are a knowledgeable coach who designs concrete, realistic plans.
 
-Return ONLY raw JSON. No prose, no explanation, no markdown fences.
+Return ONLY raw JSON. No prose outside the JSON, no markdown fences.
 
 Schema:
-{"templates":[{"title":string,"goal_id":string|null,"difficulty":"trivial"|"easy"|"medium"|"hard","days_of_week":number[],"time_of_day":"morning"|"afternoon"|"evening"|"any"}]}
+{
+  "templates": [
+    {
+      "title": string,
+      "notes": string,
+      "goal_id": string | null,
+      "difficulty": "trivial" | "easy" | "medium" | "hard",
+      "days_of_week": number[],
+      "time_of_day": "morning" | "afternoon" | "evening" | "any"
+    }
+  ],
+  "tips": [string]
+}
 
 Rules:
-- days_of_week uses 0=Sunday through 6=Saturday.
+- days_of_week MUST be integers, 0=Sunday through 6=Saturday. Never day names.
 - Only use a goal_id from the provided list, or null. Never invent one.
-- Titles are short and actionable ("Run 2 miles", not "Work on your running").
+- "title" is short and scannable ("Push day", "Meal prep lunches").
+- "notes" carries the ACTUAL substance and is the most important field. Be
+  specific and prescriptive:
+  * Strength training: name the lifts with sets and reps, e.g.
+    "Bench 4x6, Overhead press 3x8, Incline DB press 3x10, Triceps
+    pushdown 3x12. Add 5lb when you hit all reps."
+  * Running: give the workout, e.g. "3 miles easy, conversational pace.
+    Last half mile slightly faster."
+  * Nutrition: give concrete actions, e.g. "Cook 4 chicken breasts, 2 cups
+    rice, roast a tray of broccoli. Portion into 4 containers."
+  * Anything else: say exactly what to do, not a vague intention.
+- If the goal implies a split (getting stronger, building muscle), design a
+  real split across the week (e.g. push / pull / legs, or upper / lower)
+  rather than identical generic "workout" entries.
 - Assign difficulty by real effort: trivial = under a minute, easy = a normal
   daily habit, medium = takes real time or focus, hard = genuinely demanding.
-- Respect the requested days per week and time of day.
+- Respect the requested days per week, time of day, and time available.
 - Build toward any stated benchmark, ramping up gradually rather than
   starting at the target.
-- Return between 1 and 8 templates. Fewer, sustainable habits beat many.`
+- Return between 1 and 8 templates. Fewer, sustainable habits beat many.
+- "tips" is 2 to 4 short, practical pointers specific to what they're doing
+  (form cues, common mistakes, how to progress). Not generic filler.`
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -105,14 +204,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const { goal_ids, days_per_week, time_of_day, minutes_per_day, constraints } = (req.body ??
-    {}) as {
-    goal_ids?: string[]
-    days_per_week?: number
-    time_of_day?: string
-    minutes_per_day?: number
-    constraints?: string
-  }
+  const { goal_ids, objective, days_per_week, time_of_day, minutes_per_day, constraints } =
+    (req.body ?? {}) as {
+      goal_ids?: string[]
+      objective?: string
+      days_per_week?: number
+      time_of_day?: string
+      minutes_per_day?: number
+      constraints?: string
+    }
 
   try {
     const supabase = userClient(token)
@@ -148,9 +248,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     const userPrompt = [
-      'Build a weekly habit plan.',
+      'Build a weekly plan.',
       '',
-      'Goals to plan for:',
+      objective?.trim() ? `What they want to achieve: ${objective.trim()}` : '',
+      '',
+      'Existing goals to plan around:',
       selected.length > 0
         ? selected
             .map(
@@ -160,7 +262,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 })`,
             )
             .join('\n')
-        : '- (none selected; suggest general habits and use null for goal_id)',
+        : '- (none selected; use null for goal_id)',
       '',
       relevantBenchmarks.length > 0
         ? `Targets they are working toward:\n${relevantBenchmarks
@@ -192,7 +294,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.7,
-        max_tokens: 1200,
+        max_tokens: 3000,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -203,7 +305,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (groqRes.status === 429) {
       res.status(429).json({
-        error: "The AI is rate limited right now. Give it a minute and try again.",
+        error: 'The AI is rate limited right now. Give it a minute and try again.',
       })
       return
     }
@@ -232,8 +334,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
 
-    const templates = validatePlan(parsed, validGoalIds)
-    if (!templates) {
+    const result = validatePlan(parsed, validGoalIds)
+    if (!result) {
       res.status(502).json({
         error: "The AI's plan didn't come back in a usable shape. Try again.",
       })
@@ -242,7 +344,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Nothing is written to the database here — the client shows this as an
     // editable preview and only saves on explicit confirmation.
-    res.status(200).json({ templates })
+    res.status(200).json(result)
   } catch (err) {
     res.status(500).json({ error: (err as Error).message })
   }

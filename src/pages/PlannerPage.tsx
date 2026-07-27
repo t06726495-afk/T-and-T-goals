@@ -8,6 +8,7 @@ import type { Difficulty, Goal, TimeOfDay } from '../lib/types'
 
 interface PlanTemplate {
   title: string
+  notes: string | null
   goal_id: string | null
   difficulty: Difficulty
   days_of_week: number[]
@@ -17,7 +18,23 @@ interface PlanTemplate {
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-type Step = 'goals' | 'days' | 'time' | 'minutes' | 'constraints' | 'loading' | 'preview'
+const OBJECTIVE_EXAMPLES = [
+  'Get stronger',
+  'Run a faster mile',
+  'Eat healthier',
+  'Sleep better',
+  'Read more',
+]
+
+type Step =
+  | 'objective'
+  | 'goals'
+  | 'days'
+  | 'time'
+  | 'minutes'
+  | 'constraints'
+  | 'loading'
+  | 'preview'
 
 const TIME_CHOICES: { value: TimeOfDay; label: string }[] = [
   { value: 'morning', label: 'Morning' },
@@ -31,13 +48,15 @@ export function PlannerPage() {
   const navigate = useNavigate()
 
   const [goals, setGoals] = useState<Goal[]>([])
-  const [step, setStep] = useState<Step>('goals')
+  const [step, setStep] = useState<Step>('objective')
+  const [objective, setObjective] = useState('')
   const [selectedGoals, setSelectedGoals] = useState<string[]>([])
   const [daysPerWeek, setDaysPerWeek] = useState(4)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('any')
   const [minutes, setMinutes] = useState(30)
   const [constraints, setConstraints] = useState('')
   const [plan, setPlan] = useState<PlanTemplate[]>([])
+  const [tips, setTips] = useState<string[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -70,6 +89,7 @@ export function PlannerPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           goal_ids: selectedGoals,
+          objective,
           days_per_week: daysPerWeek,
           time_of_day: timeOfDay,
           minutes_per_day: minutes,
@@ -79,6 +99,7 @@ export function PlannerPage() {
 
       const json = (await res.json().catch(() => ({}))) as {
         templates?: PlanTemplate[]
+        tips?: string[]
         error?: string
       }
 
@@ -89,6 +110,7 @@ export function PlannerPage() {
       }
 
       setPlan(json.templates)
+      setTips(json.tips ?? [])
       setStep('preview')
     } catch (err) {
       setError((err as Error).message)
@@ -107,6 +129,7 @@ export function PlannerPage() {
         owner_id: profile.id,
         goal_id: t.goal_id,
         title: t.title,
+        notes: t.notes,
         difficulty: t.difficulty,
         days_of_week: t.days_of_week,
         time_of_day: t.time_of_day,
@@ -151,10 +174,40 @@ export function PlannerPage() {
         </div>
       )}
 
+      {step === 'objective' && (
+        <StepCard
+          question="What are you trying to achieve?"
+          hint="Be as specific as you like — this drives everything else."
+          onNext={() => setStep('goals')}
+        >
+          <textarea
+            value={objective}
+            onChange={(e) => setObjective(e.target.value)}
+            rows={3}
+            maxLength={300}
+            placeholder="Get stronger, especially upper body…"
+            className="w-full rounded-xl border border-border bg-surface-raised px-4 py-3 text-base text-ink focus:border-mine focus:outline-none"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {OBJECTIVE_EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => setObjective(ex)}
+                className="rounded-full border border-border px-3 py-1.5 text-xs text-ink-dim"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </StepCard>
+      )}
+
       {step === 'goals' && (
         <StepCard
-          question="Which goals do you want a plan for?"
-          hint="Pick any, or none for general suggestions."
+          question="Any existing goals to build around?"
+          hint="Optional — skip if this is something new."
+          onBack={() => setStep('objective')}
           onNext={() => setStep('days')}
         >
           {goals.length === 0 ? (
@@ -311,7 +364,7 @@ export function PlannerPage() {
               <p className="text-sm text-ink">You removed everything</p>
               <button
                 type="button"
-                onClick={() => setStep('goals')}
+                onClick={() => setStep('objective')}
                 className="mt-3 min-h-11 rounded-xl border border-border px-4 py-2 text-sm text-ink-dim"
               >
                 Start over
@@ -331,10 +384,27 @@ export function PlannerPage() {
             </div>
           )}
 
+          {tips.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-border bg-surface p-4">
+              <h3 className="text-sm font-medium text-ink-dim">Tips</h3>
+              <ul className="mt-2 space-y-2">
+                {tips.map((tip, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-ink">
+                    <span className="text-mine">•</span>
+                    <span>{tip}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-ink-dim">
+                Tips are just guidance — they aren't saved as tasks.
+              </p>
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={() => setStep('goals')}
+              onClick={() => setStep('objective')}
               className="min-h-11 flex-1 rounded-xl border border-border px-4 py-2 font-medium text-ink-dim"
             >
               Start over
@@ -355,7 +425,7 @@ export function PlannerPage() {
 }
 
 function StepDots({ current }: { current: Step }) {
-  const order: Step[] = ['goals', 'days', 'time', 'minutes', 'constraints']
+  const order: Step[] = ['objective', 'goals', 'days', 'time', 'minutes', 'constraints']
   const index = order.indexOf(current)
   return (
     <div className="mt-4 flex gap-1.5">
@@ -453,6 +523,16 @@ function PlanRow({
           ✕
         </button>
       </div>
+
+      {/* The actual substance of the plan — the lifts, the distances, the
+          meal prep steps. Editable like everything else. */}
+      <textarea
+        value={template.notes ?? ''}
+        onChange={(e) => onChange({ notes: e.target.value || null })}
+        rows={template.notes ? 3 : 2}
+        placeholder="Details (sets, reps, distance, steps…)"
+        className="mt-2 w-full rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm text-ink focus:border-mine focus:outline-none"
+      />
 
       <div className="mt-2 flex gap-1">
         {DAY_LABELS.map((label, day) => {

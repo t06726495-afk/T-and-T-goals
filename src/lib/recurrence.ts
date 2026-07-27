@@ -40,6 +40,7 @@ export async function ensureTodaysTasks(ownerId: string, timezone: string) {
       template_id: t.id,
       goal_id: t.goal_id,
       title: t.title,
+      notes: t.notes,
       task_date: today,
       difficulty: t.difficulty,
       time_of_day: t.time_of_day,

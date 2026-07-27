@@ -55,6 +55,7 @@ export interface TaskTemplate {
   owner_id: string
   goal_id: string | null
   title: string
+  notes: string | null
   difficulty: Difficulty
   days_of_week: number[]
   time_of_day: TimeOfDay
@@ -69,6 +70,7 @@ export interface Task {
   template_id: string | null
   goal_id: string | null
   title: string
+  notes: string | null
   task_date: string
   difficulty: Difficulty
   time_of_day: TimeOfDay

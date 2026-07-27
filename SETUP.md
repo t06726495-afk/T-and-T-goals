@@ -375,6 +375,19 @@ rather than an error page.
 > to the browser — the app calls your own `/api/plan` endpoint, which calls
 > Groq on the server.
 
+## 21. Run the task-notes migration
+
+The planner writes detailed instructions (the actual lifts, distances, or
+prep steps) alongside each habit, which needs one more column.
+
+1. Supabase → **SQL Editor → New query**.
+2. Paste and **Run**:
+
+   ```sql
+   alter table public.task_templates add column if not exists notes text;
+   alter table public.tasks add column if not exists notes text;
+   ```
+
 ## What's next
 
 Phase 8 is polish: offline caching, animation passes, and any rough edges
