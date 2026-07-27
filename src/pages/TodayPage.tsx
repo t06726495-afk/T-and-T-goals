@@ -77,22 +77,37 @@ export function TodayPage() {
       setCounterLogs(new Map())
     }
 
-    // Partner strip: her shared goals + today's completions. RLS already
-    // limits this to goals she's explicitly marked shared.
+    // Partner strip. Driven by the pairing itself, NOT by whether she has
+    // shared any goals — otherwise you couldn't nudge a partner who simply
+    // keeps all their goals private.
+    const { data: membership } = await supabase
+      .from('couple_members')
+      .select('couple_id')
+      .eq('profile_id', profile.id)
+      .maybeSingle()
+
+    if (membership) {
+      const { data: partnerMember } = await supabase
+        .from('couple_members')
+        .select('profiles(*)')
+        .eq('couple_id', membership.couple_id)
+        .neq('profile_id', profile.id)
+        .maybeSingle()
+      setPartner((partnerMember?.profiles as unknown as Profile) ?? null)
+    } else {
+      setPartner(null)
+    }
+
+    // Her shared-goal progress for today. RLS already limits this to goals
+    // she explicitly marked shared, so private ones never surface here.
     const { data: sharedGoals } = await supabase
       .from('goals')
-      .select('*')
+      .select('id')
       .neq('owner_id', profile.id)
       .eq('is_active', true)
-    const shared = (sharedGoals as Goal[]) ?? []
-    if (shared.length > 0) {
-      const { data: partnerProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', shared[0].owner_id)
-        .maybeSingle()
-      setPartner((partnerProfile as Profile) ?? null)
+    const shared = (sharedGoals as { id: string }[]) ?? []
 
+    if (shared.length > 0) {
       const { data: sharedLogs } = await supabase
         .from('goal_logs')
         .select('*')
@@ -105,7 +120,8 @@ export function TodayPage() {
       setPartnerDone(doneCount)
       setPartnerTotal(shared.length)
     } else {
-      setPartner(null)
+      setPartnerDone(0)
+      setPartnerTotal(0)
     }
 
     setLoading(false)
