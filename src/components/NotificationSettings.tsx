@@ -175,7 +175,7 @@ export function NotificationSettings() {
             onChange={(e) =>
               void saveSettings({ ...settings, daily_reminder_time: e.target.value || null })
             }
-            className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink focus:border-mine focus:outline-none"
+            className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
           />
           <span className="mt-1 block text-xs text-ink-dim">
             Only sent if you still have something left that day.
@@ -190,7 +190,7 @@ export function NotificationSettings() {
             onChange={(e) =>
               void saveSettings({ ...settings, quiet_hours_start: e.target.value || null })
             }
-            className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink focus:border-mine focus:outline-none"
+            className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
           />
           <span className="text-sm text-ink-dim">to</span>
           <input
@@ -199,7 +199,7 @@ export function NotificationSettings() {
             onChange={(e) =>
               void saveSettings({ ...settings, quiet_hours_end: e.target.value || null })
             }
-            className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink focus:border-mine focus:outline-none"
+            className="min-h-11 flex-1 rounded-xl border border-border bg-surface-raised px-3 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
           />
         </div>
         <p className="mt-1 text-xs text-ink-dim">

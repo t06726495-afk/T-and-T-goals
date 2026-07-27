@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import type { CoupleInfo, Goal, Profile } from '../lib/types'
 import { EMOJI_CHOICES, COLOR_CHOICES } from '../lib/pickers'
 import { NotificationSettings } from '../components/NotificationSettings'
+import { EmojiPicker } from '../components/EmojiPicker'
 import { exportMyData, downloadJson } from '../lib/export'
 
 export function SettingsPage() {
@@ -81,19 +82,8 @@ function ProfileForm({ profile, onSaved }: { profile: Profile; onSaved: () => Pr
 
       <div className="mt-4">
         <p className="text-sm text-ink-dim">Avatar</p>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {EMOJI_CHOICES.map((e) => (
-            <button
-              key={e}
-              type="button"
-              onClick={() => setEmoji(e)}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                emoji === e ? 'border-mine bg-mine/10' : 'border-border bg-surface-raised'
-              }`}
-            >
-              {e}
-            </button>
-          ))}
+        <div className="mt-1">
+          <EmojiPicker value={emoji} onChange={setEmoji} presets={EMOJI_CHOICES} />
         </div>
       </div>
 
@@ -152,6 +142,14 @@ function PairingCard() {
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [togetherSince, setTogetherSince] = useState('')
+
+  async function saveTogetherSince(value: string) {
+    setTogetherSince(value)
+    if (!value) return
+    // couples has no update policy by design; this goes through an RPC.
+    await supabase.rpc('set_together_since', { p_date: value })
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -163,6 +161,13 @@ function PairingCard() {
     }
     const info = data as CoupleInfo
     setCouple(info)
+
+    const { data: coupleRow } = await supabase
+      .from('couples')
+      .select('together_since')
+      .eq('id', info.couple_id)
+      .maybeSingle()
+    setTogetherSince((coupleRow?.together_since as string | null) ?? '')
 
     if (info.member_count === 2) {
       const { data: session } = await supabase.auth.getUser()
@@ -213,13 +218,28 @@ function PairingCard() {
       {loading && <p className="mt-2 text-sm text-ink-dim">Loading…</p>}
 
       {!loading && couple && couple.member_count === 2 && partner && (
-        <div className="mt-3 flex items-center gap-3 rounded-xl border border-partner/30 bg-partner/10 p-3">
-          <span className="text-2xl">{partner.avatar_emoji}</span>
-          <p className="text-sm text-ink">
-            Paired with{' '}
-            <span className="font-medium">{partner.display_name}</span> 🎉
-          </p>
-        </div>
+        <>
+          <div className="mt-3 flex items-center gap-3 rounded-xl border border-partner/30 bg-partner/10 p-3">
+            <span className="text-2xl">{partner.avatar_emoji}</span>
+            <p className="text-sm text-ink">
+              Paired with{' '}
+              <span className="font-medium">{partner.display_name}</span> 🎉
+            </p>
+          </div>
+
+          <label className="mt-4 block text-sm text-ink-dim">
+            Together since
+            <input
+              type="date"
+              value={togetherSince}
+              onChange={(e) => void saveTogetherSince(e.target.value)}
+              className="mt-1 min-h-11 w-full rounded-xl border border-border bg-surface-raised px-4 py-2 text-base text-ink [color-scheme:dark] focus:border-mine focus:outline-none"
+            />
+            <span className="mt-1 block text-xs text-ink-dim">
+              Shows a days-together counter on Today.
+            </span>
+          </label>
+        </>
       )}
 
       {!loading && couple && couple.member_count === 1 && (

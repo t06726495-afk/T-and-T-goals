@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { GOAL_EMOJI_CHOICES, COLOR_CHOICES, DIFFICULTY_OPTIONS } from '../lib/pickers'
 import { parseValue, formatValue, UNIT_PRESETS_BENCHMARK } from '../lib/benchmarks'
+import { EmojiPicker } from './EmojiPicker'
 import type {
   Benchmark,
   BenchmarkDirection,
@@ -250,19 +251,12 @@ export function BenchmarkFormSheet({
 
           <div>
             <p className="text-sm text-ink-dim">Emoji</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {['🏆', '⏱️', '🏋️', '⚖️', ...GOAL_EMOJI_CHOICES.slice(0, 6)].map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => setEmoji(e)}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                    emoji === e ? 'border-mine bg-mine/10' : 'border-border bg-surface-raised'
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
+            <div className="mt-1">
+              <EmojiPicker
+                value={emoji}
+                onChange={setEmoji}
+                presets={['🏆', '⏱️', '🏋️', '⚖️', ...GOAL_EMOJI_CHOICES.slice(0, 6)]}
+              />
             </div>
           </div>
 

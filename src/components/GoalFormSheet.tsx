@@ -8,6 +8,7 @@ import {
   UNIT_PRESETS,
   TITLE_PLACEHOLDER,
 } from '../lib/pickers'
+import { EmojiPicker } from './EmojiPicker'
 import type { Difficulty, Goal, GoalKind, Visibility } from '../lib/types'
 
 interface GoalFormSheetProps {
@@ -29,7 +30,6 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
 
   const [title, setTitle] = useState(goal?.title ?? '')
   const [emoji, setEmoji] = useState(goal?.emoji ?? GOAL_EMOJI_CHOICES[0])
-  const [customEmojiMode, setCustomEmojiMode] = useState(false)
   const [color, setColor] = useState(goal?.color ?? profile?.accent_color ?? COLOR_CHOICES[0])
   const [kind, setKind] = useState<GoalKind>(goal?.kind ?? 'checkbox')
   const [target, setTarget] = useState(goal?.target_per_day?.toString() ?? '10')
@@ -233,44 +233,9 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
 
           <div>
             <p className="text-sm text-ink-dim">Emoji</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {GOAL_EMOJI_CHOICES.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    setEmoji(e)
-                    setCustomEmojiMode(false)
-                  }}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                    !customEmojiMode && emoji === e
-                      ? 'border-mine bg-mine/10'
-                      : 'border-border bg-surface-raised'
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setCustomEmojiMode(true)}
-                className={`flex h-11 w-11 items-center justify-center rounded-xl border text-xl ${
-                  customEmojiMode ? 'border-mine bg-mine/10 text-mine' : 'border-border bg-surface-raised text-ink-dim'
-                }`}
-              >
-                +
-              </button>
+            <div className="mt-1">
+              <EmojiPicker value={emoji} onChange={setEmoji} presets={GOAL_EMOJI_CHOICES} />
             </div>
-            {customEmojiMode && (
-              <input
-                autoFocus
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
-                onKeyDown={preventEnterSubmit}
-                placeholder="Paste or type any emoji"
-                className={`${inputClass} mt-2 text-center text-2xl`}
-              />
-            )}
           </div>
 
           <div>

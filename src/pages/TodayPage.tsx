@@ -6,13 +6,13 @@ import { ensureTodaysTasks } from '../lib/recurrence'
 import { timeOfDayLabel } from '../lib/date'
 import { levelProgress } from '../lib/levels'
 import { haptic } from '../lib/motion'
-import { InstallStatus } from '../components/InstallStatus'
 import { Confetti } from '../components/Confetti'
 import { AnimatedCheck } from '../components/AnimatedCheck'
 import { ProgressRing } from '../components/ProgressRing'
 import { NudgeComposer } from '../components/NudgeComposer'
 import { notifyPartner } from '../lib/push'
 import { currentStreak, shiftDate } from '../lib/streak'
+import { quoteForDate, daysTogether } from '../lib/quotes'
 import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
@@ -35,6 +35,8 @@ export function TodayPage() {
   const [editingCountValue, setEditingCountValue] = useState('')
   const [nudging, setNudging] = useState(false)
   const [expandedTask, setExpandedTask] = useState<string | null>(null)
+  const [goalsById, setGoalsById] = useState<Map<string, Goal>>(new Map())
+  const [togetherSince, setTogetherSince] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -51,14 +53,17 @@ export function TodayPage() {
       .order('created_at', { ascending: true })
     setTasks((todaysTasks as Task[]) ?? [])
 
+    // All my goals: counters render inline, and the rest supply the emoji
+    // shown against each task.
     const { data: goals } = await supabase
       .from('goals')
       .select('*')
       .eq('owner_id', profile.id)
       .eq('is_active', true)
-      .eq('kind', 'counter')
       .order('sort_order', { ascending: true })
-    const counters = (goals as Goal[]) ?? []
+    const allGoals = (goals as Goal[]) ?? []
+    setGoalsById(new Map(allGoals.map((g) => [g.id, g])))
+    const counters = allGoals.filter((g) => g.kind === 'counter')
     setCounterGoals(counters)
 
     if (counters.length > 0) {
@@ -89,15 +94,24 @@ export function TodayPage() {
       .maybeSingle()
 
     if (membership) {
-      const { data: partnerMember } = await supabase
-        .from('couple_members')
-        .select('profiles(*)')
-        .eq('couple_id', membership.couple_id)
-        .neq('profile_id', profile.id)
-        .maybeSingle()
+      const [{ data: partnerMember }, { data: couple }] = await Promise.all([
+        supabase
+          .from('couple_members')
+          .select('profiles(*)')
+          .eq('couple_id', membership.couple_id)
+          .neq('profile_id', profile.id)
+          .maybeSingle(),
+        supabase
+          .from('couples')
+          .select('together_since')
+          .eq('id', membership.couple_id)
+          .maybeSingle(),
+      ])
       setPartner((partnerMember?.profiles as unknown as Profile) ?? null)
+      setTogetherSince((couple?.together_since as string | null) ?? null)
     } else {
       setPartner(null)
+      setTogetherSince(null)
     }
 
     // Her shared-goal progress for today. RLS already limits this to goals
@@ -373,8 +387,21 @@ export function TodayPage() {
         <NudgeComposer partner={partner} onClose={() => setNudging(false)} />
       )}
 
-      <div className="mt-4">
-        <InstallStatus />
+      {/* Days together + a quote that rotates once a day (deterministic on
+          the date, so you both see the same one). */}
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
+        {togetherSince && (
+          <div className="flex items-center justify-center gap-2 border-b border-border bg-partner/10 px-4 py-2.5">
+            <span className="text-sm">💞</span>
+            <p className="text-sm text-ink">
+              <span className="font-semibold">{daysTogether(togetherSince, today)}</span>
+              <span className="text-ink-dim"> days together</span>
+            </p>
+          </div>
+        )}
+        <p className="px-4 py-3 text-center text-sm italic leading-relaxed text-ink-dim">
+          {quoteForDate(today)}
+        </p>
       </div>
 
       {counterGoals.length > 0 && (
@@ -470,7 +497,9 @@ export function TodayPage() {
         <div key={group.tod} className="mt-6">
           <h2 className="text-sm font-medium text-ink-dim">{timeOfDayLabel(group.tod)}</h2>
           <div className="mt-2 space-y-2">
-            {group.items.map((task) => (
+            {group.items.map((task) => {
+              const taskGoal = task.goal_id ? goalsById.get(task.goal_id) : undefined
+              return (
               <div key={task.id} className="relative">
                 <button
                   type="button"
@@ -491,6 +520,14 @@ export function TodayPage() {
                       <AnimatedCheck done={task.done} celebrating={celebrating === task.id} />
                     </span>
                   </span>
+                  {taskGoal && (
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
+                      style={{ backgroundColor: `${taskGoal.color}26` }}
+                    >
+                      {taskGoal.emoji}
+                    </span>
+                  )}
                   <span
                     className={`flex-1 transition-colors duration-300 ${task.done ? 'text-ink-dim' : 'text-ink'}`}
                   >
@@ -537,7 +574,8 @@ export function TodayPage() {
                   </span>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       ))}
