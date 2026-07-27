@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { levelProgress, levelThreshold } from '../lib/levels'
 import {
+  badgeSummary,
   computeBadges,
   levelTitle,
   parseSummary,
   EMPTY_SUMMARY,
+  TIER_COLORS,
   type PointsSummary,
 } from '../lib/gamification'
 import { PointsChart, type ChartSeries } from '../components/PointsChart'
@@ -28,10 +31,24 @@ function levelStorageKey(profileId: string) {
   return `mogging:level:${profileId}`
 }
 
+// The history RPC returns points *earned per day*. To race each other on
+// all-time totals we need the running total instead, so we work backwards
+// from the stored lifetime total: everything before this window is
+// (total - what the window contains), then accumulate forward.
+function cumulative(daily: number[], allTimeTotal: number): number[] {
+  const windowSum = daily.reduce((a, b) => a + b, 0)
+  let running = allTimeTotal - windowSum
+  return daily.map((v) => {
+    running += v
+    return running
+  })
+}
+
 export function PointsPage() {
   const { profile, refreshProfile } = useAuth()
   const [partner, setPartner] = useState<Profile | null>(null)
   const [days, setDays] = useState(30)
+  const [mode, setMode] = useState<'daily' | 'total'>('daily')
   const [myHistory, setMyHistory] = useState<DayPoints[]>([])
   const [partnerHistory, setPartnerHistory] = useState<DayPoints[]>([])
   const [mySummary, setMySummary] = useState<PointsSummary>(EMPTY_SUMMARY)
@@ -141,7 +158,8 @@ export function PointsPage() {
   const { fraction } = levelProgress(profile.points_total, profile.current_level)
   const toNext = Math.max(0, levelThreshold(profile.current_level + 1) - profile.points_total)
   const badges = computeBadges(profile.points_total, profile.current_level, mySummary)
-  const earnedCount = badges.filter((b) => b.earned).length
+  const { tiersEarned, tiersTotal } = badgeSummary(badges)
+  const topBadges = [...badges].sort((a, b) => b.tierIndex - a.tierIndex).slice(0, 4)
   const weekDelta = mySummary.points_week - mySummary.points_prev_week
   const together = profile.points_total + (partner?.points_total ?? 0)
 
@@ -151,13 +169,22 @@ export function PointsPage() {
       ? date.toLocaleDateString(undefined, { weekday: 'narrow' })
       : date.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })
   })
+  const fullLabels = myHistory.map((d) =>
+    new Date(`${d.day}T00:00:00`).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    }),
+  )
+
+  const myDaily = myHistory.map((d) => d.points)
+  const partnerDaily = partnerHistory.map((d) => d.points)
 
   const series: ChartSeries[] = [
     {
       key: 'mine',
       label: profile.display_name,
       color: 'var(--color-mine)',
-      values: myHistory.map((d) => d.points),
+      values: mode === 'total' ? cumulative(myDaily, profile.points_total) : myDaily,
     },
   ]
   if (partner && partnerHistory.length === myHistory.length) {
@@ -165,9 +192,14 @@ export function PointsPage() {
       key: 'partner',
       label: partner.display_name,
       color: 'var(--color-partner)',
-      values: partnerHistory.map((d) => d.points),
+      values: mode === 'total' ? cumulative(partnerDaily, partner.points_total) : partnerDaily,
     })
   }
+
+  // In total mode the interesting number is the gap between the two curves,
+  // not who is "winning" — framed as a distance so it reads as a race you're
+  // both running, not a scoreboard.
+  const gap = partner ? Math.abs(profile.points_total - partner.points_total) : 0
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
@@ -257,8 +289,27 @@ export function PointsPage() {
 
       {/* Chart */}
       <div className="mt-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-ink-dim">Points over time</h2>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-1 rounded-full border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setMode('daily')}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                mode === 'daily' ? 'bg-mine text-bg' : 'text-ink-dim'
+              }`}
+            >
+              Daily
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('total')}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                mode === 'total' ? 'bg-mine text-bg' : 'text-ink-dim'
+              }`}
+            >
+              Total
+            </button>
+          </div>
           <div className="flex gap-1 rounded-full border border-border p-0.5">
             {RANGES.map((r) => (
               <button
@@ -276,7 +327,7 @@ export function PointsPage() {
         </div>
 
         <div className="mt-2">
-          <PointsChart labels={labels} series={series} />
+          <PointsChart labels={labels} fullLabels={fullLabels} series={series} />
         </div>
 
         <div className="mt-2 flex items-center justify-center gap-4 text-xs text-ink-dim">
@@ -287,6 +338,14 @@ export function PointsPage() {
             </span>
           ))}
         </div>
+
+        {mode === 'total' && partner && (
+          <p className="mt-2 text-center text-xs text-ink-dim">
+            {gap === 0
+              ? "Dead even. Somehow you're both on exactly the same number."
+              : `${gap} points between the two lines.`}
+          </p>
+        )}
       </div>
 
       {/* Together */}
@@ -300,36 +359,59 @@ export function PointsPage() {
         </div>
       )}
 
-      {/* Badges */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-ink-dim">Badges</h2>
-          <span className="text-xs text-ink-dim">
-            {earnedCount}/{badges.length}
-          </span>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {badges.map((b) => (
-            <div
+      {/* Badges — a door, not a grid. The full ladder lives on its own screen
+          so it has room to show tiers and progress. */}
+      <Link
+        to="/badges"
+        className="mt-6 flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 transition-colors active:bg-surface-raised"
+      >
+        <div className="flex -space-x-2">
+          {topBadges.map((b) => (
+            <span
               key={b.id}
-              className={`rounded-xl border p-3 text-center ${
-                b.earned ? 'border-mine/30 bg-mine/10' : 'border-border bg-surface opacity-50'
+              className={`flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface text-lg ${
+                b.tierIndex >= 0 ? '' : 'opacity-40 grayscale'
               }`}
+              style={{
+                backgroundColor: b.tier
+                  ? `color-mix(in srgb, ${TIER_COLORS[b.tier]} 25%, var(--color-surface-raised))`
+                  : 'var(--color-surface-raised)',
+              }}
             >
-              <p className={`text-2xl ${b.earned ? '' : 'grayscale'}`}>{b.emoji}</p>
-              <p className="mt-1 text-xs font-medium text-ink">{b.label}</p>
-              <p className="mt-0.5 text-[10px] leading-tight text-ink-dim">
-                {b.earned ? 'Earned' : b.hint}
-              </p>
-            </div>
+              {b.emoji}
+            </span>
           ))}
         </div>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-ink">Badges</p>
+          <p className="text-sm text-ink-dim">
+            {tiersEarned} of {tiersTotal} tiers earned
+          </p>
+        </div>
+        <span className="text-ink-dim">›</span>
+      </Link>
 
       {/* Personal bests */}
       <div className="mt-6">
         <h2 className="text-sm font-medium text-ink-dim">Your records</h2>
         <div className="mt-2 grid grid-cols-3 gap-2">
+          <RecordCard
+            label="Days in a row"
+            value={`${mySummary.longest_active_days}`}
+            sub="most ever"
+          />
+          <RecordCard
+            label="Benchmarks"
+            value={`${mySummary.benchmarks_hit}`}
+            sub="targets hit"
+          />
+          <RecordCard
+            label="Completed"
+            value={`${mySummary.completion_pct}%`}
+            sub="of goal days"
+          />
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <RecordCard
             label="Best day"
             value={`${mySummary.best_day_points}`}
@@ -343,11 +425,6 @@ export function PointsPage() {
             }
           />
           <RecordCard label="Active days" value={`${mySummary.active_days}`} sub="with points" />
-          <RecordCard
-            label="Benchmarks"
-            value={`${mySummary.benchmarks_hit}`}
-            sub="targets hit"
-          />
         </div>
       </div>
     </div>

@@ -7,6 +7,8 @@ export interface PointsSummary {
   active_days: number
   total_completions: number
   benchmarks_hit: number
+  longest_active_days: number
+  completion_pct: number
   best_streak: number
 }
 
@@ -19,6 +21,8 @@ export const EMPTY_SUMMARY: PointsSummary = {
   active_days: 0,
   total_completions: 0,
   benchmarks_hit: 0,
+  longest_active_days: 0,
+  completion_pct: 0,
   best_streak: 0,
 }
 
@@ -33,6 +37,8 @@ export function parseSummary(raw: unknown): PointsSummary {
     active_days: Number(r.active_days ?? 0),
     total_completions: Number(r.total_completions ?? 0),
     benchmarks_hit: Number(r.benchmarks_hit ?? 0),
+    longest_active_days: Number(r.longest_active_days ?? 0),
+    completion_pct: Number(r.completion_pct ?? 0),
     best_streak: Number(r.best_streak ?? 0),
   }
 }
@@ -55,89 +61,139 @@ export function levelTitle(level: number): string {
   return RANKS.find((r) => level >= r.min)?.title ?? 'Getting started'
 }
 
+// ---------------------------------------------------------------------------
+// Badges
+//
+// Each badge is one long-running pursuit with escalating tiers, rather than a
+// one-and-done sticker. That way a badge keeps giving you something to aim at
+// instead of going dead the moment it unlocks.
+// ---------------------------------------------------------------------------
+
+export type TierName = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond'
+
+export const TIER_ORDER: TierName[] = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond']
+
+export const TIER_COLORS: Record<TierName, string> = {
+  Bronze: '#b87333',
+  Silver: '#b5bcc4',
+  Gold: '#e0b13a',
+  Platinum: '#8fd3d0',
+  Diamond: '#9fa8ff',
+}
+
+export interface BadgeDef {
+  id: string
+  emoji: string
+  label: string
+  unit: string // e.g. "points", "days"
+  thresholds: number[] // one per tier, ascending
+  value: (s: PointsSummary, total: number, level: number) => number
+}
+
+const BADGE_DEFS: BadgeDef[] = [
+  {
+    id: 'level',
+    emoji: '🏅',
+    label: 'Level',
+    unit: '',
+    thresholds: [5, 10, 25, 50, 100],
+    value: (_s, _t, level) => level,
+  },
+  {
+    id: 'points',
+    emoji: '⚡',
+    label: 'Points',
+    unit: 'pts',
+    thresholds: [100, 500, 2000, 10000, 50000],
+    value: (_s, total) => total,
+  },
+  {
+    id: 'streak',
+    emoji: '🔥',
+    label: 'Streak',
+    unit: 'days',
+    thresholds: [7, 30, 100, 250, 365],
+    value: (s) => s.best_streak,
+  },
+  {
+    id: 'consistency',
+    emoji: '📅',
+    label: 'Consistency',
+    unit: 'days',
+    thresholds: [7, 30, 100, 250, 500],
+    value: (s) => s.longest_active_days,
+  },
+  {
+    id: 'completions',
+    emoji: '💯',
+    label: 'Completed',
+    unit: '',
+    thresholds: [10, 100, 500, 2000, 10000],
+    value: (s) => s.total_completions,
+  },
+  {
+    id: 'benchmarks',
+    emoji: '🏆',
+    label: 'Benchmarks',
+    unit: 'hit',
+    thresholds: [1, 5, 15, 40, 100],
+    value: (s) => s.benchmarks_hit,
+  },
+]
+
 export interface Badge {
   id: string
   emoji: string
   label: string
-  hint: string
-  earned: boolean
+  unit: string
+  value: number
+  /** null until the first threshold is reached. */
+  tier: TierName | null
+  tierIndex: number // -1 when unearned
+  nextThreshold: number | null // null once maxed
+  /** 0..1 toward the next tier. */
+  progress: number
+  maxed: boolean
 }
 
-export function computeBadges(
-  total: number,
-  level: number,
-  summary: PointsSummary,
-): Badge[] {
-  return [
-    {
-      id: 'first',
-      emoji: '🌱',
-      label: 'First step',
-      hint: 'Complete anything once',
-      earned: summary.total_completions >= 1,
-    },
-    {
-      id: 'week-streak',
-      emoji: '🔥',
-      label: 'Week strong',
-      hint: 'Hold a 7 day streak',
-      earned: summary.best_streak >= 7,
-    },
-    {
-      id: 'points-100',
-      emoji: '⚡',
-      label: '100 club',
-      hint: 'Earn 100 points',
-      earned: total >= 100,
-    },
-    {
-      id: 'active-14',
-      emoji: '📅',
-      label: 'Regular',
-      hint: 'Be active 14 days',
-      earned: summary.active_days >= 14,
-    },
-    {
-      id: 'level-5',
-      emoji: '🏅',
-      label: 'Level 5',
-      hint: 'Reach level 5',
-      earned: level >= 5,
-    },
-    {
-      id: 'month-streak',
-      emoji: '💎',
-      label: 'Month strong',
-      hint: 'Hold a 30 day streak',
-      earned: summary.best_streak >= 30,
-    },
-    {
-      id: 'benchmark-first',
-      emoji: '🏆',
-      label: 'Target hit',
-      hint: 'Hit a benchmark',
-      earned: summary.benchmarks_hit >= 1,
-    },
-    {
-      id: 'points-500',
-      emoji: '🚀',
-      label: '500 club',
-      hint: 'Earn 500 points',
-      earned: total >= 500,
-    },
-    {
-      id: 'century',
-      emoji: '💯',
-      label: 'Century',
-      hint: 'Complete 100 things',
-      earned: summary.total_completions >= 100,
-    },
-    {
-      id: 'level-10',
-      emoji: '👑',
-      label: 'Level 10',
-      hint: 'Reach level 10',
-      earned: level >= 10,
-    },
-  ]
+export function computeBadges(total: number, level: number, summary: PointsSummary): Badge[] {
+  return BADGE_DEFS.map((def) => {
+    const value = def.value(summary, total, level)
+
+    // Highest threshold cleared.
+    let tierIndex = -1
+    for (let i = 0; i < def.thresholds.length; i++) {
+      if (value >= def.thresholds[i]) tierIndex = i
+    }
+
+    const maxed = tierIndex === def.thresholds.length - 1
+    const nextThreshold = maxed ? null : def.thresholds[tierIndex + 1]
+    const floor = tierIndex >= 0 ? def.thresholds[tierIndex] : 0
+    const progress =
+      nextThreshold === null
+        ? 1
+        : Math.max(0, Math.min(1, (value - floor) / (nextThreshold - floor)))
+
+    return {
+      id: def.id,
+      emoji: def.emoji,
+      label: def.label,
+      unit: def.unit,
+      value,
+      tier: tierIndex >= 0 ? TIER_ORDER[tierIndex] : null,
+      tierIndex,
+      nextThreshold,
+      progress,
+      maxed,
+    }
+  })
+}
+
+export function badgeSummary(badges: Badge[]) {
+  const earned = badges.filter((b) => b.tierIndex >= 0).length
+  // Total tiers cleared across every badge — a better sense of overall
+  // progress than "3 of 6 badges" once tiers exist.
+  const tiersEarned = badges.reduce((sum, b) => sum + (b.tierIndex + 1), 0)
+  const tiersTotal = badges.length * TIER_ORDER.length
+  return { earned, total: badges.length, tiersEarned, tiersTotal }
 }

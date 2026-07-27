@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 
 export interface ChartSeries {
   key: string
@@ -8,10 +8,10 @@ export interface ChartSeries {
 }
 
 const W = 320
-const H = 140
+const H = 150
 const PAD_X = 6
-const PAD_TOP = 10
-const PAD_BOTTOM = 18
+const PAD_TOP = 12
+const PAD_BOTTOM = 20
 
 // Catmull-Rom -> cubic bezier, so the trend line reads as a smooth curve
 // rather than a jagged polyline. Plain SVG, no charting library (the stack
@@ -38,11 +38,16 @@ function smoothPath(pts: { x: number; y: number }[]): string {
 export function PointsChart({
   labels,
   series,
+  fullLabels,
 }: {
   labels: string[]
   series: ChartSeries[]
+  /** Longer labels used in the scrub readout, e.g. "Mar 4". */
+  fullLabels?: string[]
 }) {
   const gradId = useId()
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [active, setActive] = useState<number | null>(null)
 
   const max = useMemo(() => {
     const all = series.flatMap((s) => s.values)
@@ -53,19 +58,44 @@ export function PointsChart({
   const innerW = W - PAD_X * 2
   const innerH = H - PAD_TOP - PAD_BOTTOM
 
-  const toPoints = (values: number[]) =>
-    values.map((v, i) => ({
-      x: PAD_X + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW),
-      y: PAD_TOP + innerH - (v / max) * innerH,
-    }))
+  const xFor = (i: number) => PAD_X + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
+  const yFor = (v: number) => PAD_TOP + innerH - (v / max) * innerH
 
-  // Only label a handful of x positions so a 90-day range doesn't turn into
-  // an unreadable smear of dates.
+  const toPoints = (values: number[]) => values.map((v, i) => ({ x: xFor(i), y: yFor(v) }))
+
   const tickEvery = Math.max(1, Math.ceil(n / 6))
+
+  // Map a pointer position to the nearest data index. Uses the SVG's own
+  // bounding box so it stays correct however the chart is scaled.
+  function indexFromEvent(clientX: number) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect || n === 0) return null
+    const ratio = (clientX - rect.left) / rect.width
+    const svgX = ratio * W
+    const i = Math.round(((svgX - PAD_X) / innerW) * (n - 1))
+    return Math.max(0, Math.min(n - 1, i))
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Points over time">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full touch-none select-none"
+        role="img"
+        aria-label="Points over time"
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setActive(indexFromEvent(e.clientX))
+        }}
+        onPointerMove={(e) => {
+          if (e.buttons === 0 && e.pointerType === 'mouse') return
+          setActive(indexFromEvent(e.clientX))
+        }}
+        onPointerUp={() => setActive(null)}
+        onPointerCancel={() => setActive(null)}
+        onPointerLeave={() => setActive(null)}
+      >
         <defs>
           {series.map((s) => (
             <linearGradient key={s.key} id={`${gradId}-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -108,12 +138,38 @@ export function PointsChart({
           )
         })}
 
+        {/* Scrub line and per-series dots at the touched day. */}
+        {active !== null && (
+          <g pointerEvents="none">
+            <line
+              x1={xFor(active)}
+              x2={xFor(active)}
+              y1={PAD_TOP}
+              y2={PAD_TOP + innerH}
+              stroke="var(--color-ink-dim)"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            {series.map((s) => (
+              <circle
+                key={s.key}
+                cx={xFor(active)}
+                cy={yFor(s.values[active] ?? 0)}
+                r="4"
+                fill={s.color}
+                stroke="var(--color-surface)"
+                strokeWidth="1.5"
+              />
+            ))}
+          </g>
+        )}
+
         {labels.map((label, i) =>
           i % tickEvery === 0 || i === n - 1 ? (
             <text
               key={i}
-              x={PAD_X + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)}
-              y={H - 4}
+              x={xFor(i)}
+              y={H - 5}
               textAnchor="middle"
               fontSize="8"
               fill="var(--color-ink-dim)"
@@ -123,10 +179,28 @@ export function PointsChart({
           ) : null,
         )}
 
-        <text x={PAD_X} y={PAD_TOP - 2} fontSize="8" fill="var(--color-ink-dim)">
+        <text x={PAD_X} y={PAD_TOP - 3} fontSize="8" fill="var(--color-ink-dim)">
           {max}
         </text>
       </svg>
+
+      {/* Readout sits below the chart rather than floating over it, so it
+          never ends up under the finger that's scrubbing. Reserves its own
+          height so the layout doesn't jump when it appears. */}
+      <div className="mt-1 flex min-h-[20px] items-center justify-center gap-3 text-xs">
+        {active !== null ? (
+          <>
+            <span className="text-ink-dim">{fullLabels?.[active] ?? labels[active]}</span>
+            {series.map((s) => (
+              <span key={s.key} className="font-medium" style={{ color: s.color }}>
+                {s.values[active] ?? 0}
+              </span>
+            ))}
+          </>
+        ) : (
+          <span className="text-ink-dim">Touch the chart to see any day</span>
+        )}
+      </div>
     </div>
   )
 }
