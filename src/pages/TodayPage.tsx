@@ -148,14 +148,6 @@ export function TodayPage() {
     const day = await ensureTodaysTasks(profile.id, profile.timezone)
     setToday(day)
 
-    const { data: todaysTasks } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('owner_id', profile.id)
-      .eq('task_date', day)
-      .order('created_at', { ascending: true })
-    setTasks((todaysTasks as Task[]) ?? [])
-
     // All my goals: counters render inline, and the rest supply the emoji
     // shown against each task.
     const { data: goals } = await supabase
@@ -165,8 +157,26 @@ export function TodayPage() {
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
     const allGoals = (goals as Goal[]) ?? []
-    setGoalsById(new Map(allGoals.map((g) => [g.id, g])))
+    const byId = new Map(allGoals.map((g) => [g.id, g]))
+    setGoalsById(byId)
     setMyGoals(allGoals)
+
+    const { data: todaysTasks } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('owner_id', profile.id)
+      .eq('task_date', day)
+      .order('created_at', { ascending: true })
+
+    // Drop outstanding tasks belonging to a goal that's been archived. Archive
+    // now clears these itself, but goals archived before that did leave tasks
+    // stranded here: no emoji, nothing to complete them for, still counted in
+    // the day's total. Anything already ticked stays, since it earned points.
+    setTasks(
+      ((todaysTasks as Task[]) ?? []).filter(
+        (t) => t.done || !t.goal_id || byId.has(t.goal_id),
+      ),
+    )
 
     // Goals that a recurring template already schedules. Those appear as
     // tasks on the days they're due, so they must NOT also appear as a

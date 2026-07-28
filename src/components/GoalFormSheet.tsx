@@ -195,6 +195,19 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
       .update({ is_active: false, archived_at: new Date().toISOString() })
       .eq('id', goal.id)
     await deactivateTemplates(goal.id)
+
+    // Deactivating the templates stops FUTURE tasks, but today's were already
+    // materialized this morning and would sit on Today with nothing to
+    // complete them for. Clear the ones still outstanding. Anything already
+    // ticked stays: it happened, and it earned its points.
+    await supabase
+      .from('tasks')
+      .delete()
+      .eq('goal_id', goal.id)
+      .eq('owner_id', profile!.id)
+      .eq('done', false)
+      .gte('task_date', new Date().toISOString().slice(0, 10))
+
     setSaving(false)
     onSaved()
   }
