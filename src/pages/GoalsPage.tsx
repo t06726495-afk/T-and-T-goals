@@ -105,12 +105,17 @@ export function GoalsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-ink">Goals</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold text-ink">Goals</h1>
+          {/* Today is where you tick things off. This screen is for setting
+              them up and seeing how they've gone. */}
+          <p className="mt-1 text-sm text-ink-dim">Set them up here, tick them off on Today.</p>
+        </div>
         <button
           type="button"
           onClick={() => setEditingGoal('new')}
-          className="min-h-11 rounded-full bg-mine px-4 py-2 font-medium text-bg"
+          className="min-h-11 shrink-0 rounded-full bg-mine px-4 py-2 font-medium text-bg transition-transform active:scale-95"
         >
           + Add goal
         </button>
@@ -122,7 +127,7 @@ export function GoalsPage() {
         <div className="mt-6 rounded-2xl border border-border bg-surface p-6 text-center">
           <p className="text-ink">No goals yet</p>
           <p className="mt-1 text-sm text-ink-dim">
-            Add your first one — a daily habit, a counter like glasses of
+            Add your first one: a daily habit, a counter like glasses of
             water, whatever you want to build.
           </p>
           <button

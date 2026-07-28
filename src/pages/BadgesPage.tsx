@@ -48,9 +48,9 @@ export function BadgesPage() {
         ← Points
       </Link>
 
-      <h1 className="mt-2 text-2xl font-semibold text-ink">Badges</h1>
+      <h1 className="mt-2 text-3xl font-semibold text-ink">Badges</h1>
       <p className="mt-1 text-sm text-ink-dim">
-        {tiersEarned} of {tiersTotal} tiers earned. Every badge keeps going — clear a tier
+        {tiersEarned} of {tiersTotal} tiers earned. Every badge keeps going: clear a tier
         and the next one opens up.
       </p>
 

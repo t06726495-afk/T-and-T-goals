@@ -147,7 +147,7 @@ export function PointsPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-6">
-        <h1 className="text-2xl font-semibold text-ink">Points</h1>
+        <h1 className="text-3xl font-semibold text-ink">Points</h1>
         <div className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 p-4 text-sm text-ink">
           {error}
         </div>
@@ -203,7 +203,7 @@ export function PointsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-2xl font-semibold text-ink">Points</h1>
+      <h1 className="text-3xl font-semibold text-ink">Points</h1>
       <p className="mt-1 text-sm text-ink-dim">How you're both doing.</p>
 
       {leveledUpTo && (

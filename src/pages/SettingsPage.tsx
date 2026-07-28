@@ -12,7 +12,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-2xl font-semibold text-ink">Settings</h1>
+      <h1 className="text-3xl font-semibold text-ink">Settings</h1>
 
       {profile && <ProfileForm profile={profile} onSaved={refreshProfile} />}
 
@@ -245,7 +245,7 @@ function PairingCard() {
       {!loading && couple && couple.member_count === 1 && (
         <>
           <p className="mt-2 text-sm text-ink-dim">
-            Share this code with her — she enters it below to pair.
+            Share this code with her. She enters it below to pair.
           </p>
           <p className="mt-2 text-center text-3xl font-bold tracking-[0.3em] text-mine">
             {couple.invite_code}
@@ -346,7 +346,7 @@ function ArchivedGoalsCard({ profileId }: { profileId: string }) {
             </div>
           ))}
           <p className="text-xs text-ink-dim">
-            Archiving never deletes history — restoring brings back the full
+            Archiving never deletes history. Restoring brings back the full
             record.
           </p>
         </div>
@@ -375,7 +375,7 @@ function DataCard({ profileId }: { profileId: string }) {
     <section className="mt-6 rounded-2xl border border-border bg-surface p-4">
       <h2 className="font-medium text-ink">Your data</h2>
       <p className="mt-1 text-sm text-ink-dim">
-        Download everything you've logged as a JSON file — goals, history,
+        Download everything you've logged as a JSON file: goals, history,
         benchmarks, and nudges.
       </p>
       <button

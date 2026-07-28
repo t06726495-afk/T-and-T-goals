@@ -21,7 +21,7 @@ export function OfflineBanner() {
 
   return (
     <div className="safe-x bg-danger/15 px-4 py-2 text-center text-xs text-ink">
-      You're offline — changes won't save until you reconnect.
+      You're offline. Changes won't save until you reconnect.
     </div>
   )
 }

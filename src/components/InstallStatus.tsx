@@ -33,7 +33,7 @@ export function InstallStatus() {
   if (standalone) {
     return (
       <div className="rounded-2xl border border-mine/30 bg-mine/10 p-4 text-sm text-ink">
-        ✅ Installed — you're running this as a standalone app.
+        ✅ Installed. You're running this as a standalone app.
       </div>
     )
   }
@@ -54,7 +54,7 @@ export function InstallStatus() {
         </ol>
         <p className="mt-2 text-xs">
           Notifications only work once this is added to your Home Screen from
-          Safari and opened from there — iOS 16.4+ is required.
+          Safari and opened from there. iOS 16.4 or later is required.
         </p>
       </div>
     )

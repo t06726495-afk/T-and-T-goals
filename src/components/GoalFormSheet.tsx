@@ -344,7 +344,7 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
             >
               {DIFFICULTY_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>
-                  {d.label} — {d.points} pt{d.points === 1 ? '' : 's'}
+                  {d.label} · {d.points} pt{d.points === 1 ? '' : 's'}
                 </option>
               ))}
             </select>
@@ -387,7 +387,7 @@ export function GoalFormSheet({ goal, onClose, onSaved }: GoalFormSheetProps) {
               </button>
             </div>
             <p className="mt-1 text-xs text-ink-dim">
-              Private goals are invisible to her — even that they exist.
+              Private goals are invisible to her, even that they exist.
             </p>
           </div>
 

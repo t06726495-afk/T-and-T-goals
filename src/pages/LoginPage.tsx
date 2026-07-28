@@ -61,7 +61,7 @@ export function LoginPage() {
           <>
             <div className="mt-6 rounded-2xl border border-mine/30 bg-mine/10 p-4 text-sm text-ink">
               We sent a code to <span className="font-medium">{email}</span>.
-              Enter it below — no need to leave this app.
+              Enter it below. No need to leave this app.
             </div>
 
             <form onSubmit={handleVerifyCode} className="mt-4 space-y-3">

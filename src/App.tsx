@@ -69,22 +69,28 @@ function AuthGate() {
   return (
     <>
       <ServiceWorkerNavigation />
+      {/* safe-top lives on the wrapper so the status-bar inset is applied
+          once, whether or not the offline banner is showing. */}
+      <div className="safe-top">
+        <OfflineBanner />
+        {/* Keyed on the route so the enter animation replays per screen.
+            pb-tabs keeps the last row of every screen clear of the fixed tab
+            bar instead of hiding under it. */}
+        <main key={location.pathname} className="safe-x pb-tabs page-enter">
+          <Routes>
+            <Route path="/" element={<TodayPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/partner" element={<PartnerPage />} />
+            <Route path="/points" element={<PointsPage />} />
+            {/* Reached from the Points screen. Deliberately not a tab: six is
+                already the practical limit for a bottom bar. */}
+            <Route path="/badges" element={<BadgesPage />} />
+            <Route path="/planner" element={<PlannerPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
+      </div>
       <NavBar />
-      <OfflineBanner />
-      {/* Keyed on the route so the enter animation replays per screen. */}
-      <main key={location.pathname} className="safe-x safe-bottom page-enter">
-        <Routes>
-          <Route path="/" element={<TodayPage />} />
-          <Route path="/goals" element={<GoalsPage />} />
-          <Route path="/partner" element={<PartnerPage />} />
-          <Route path="/points" element={<PointsPage />} />
-          {/* Reached from the Points screen — deliberately not a nav entry, the
-              top nav is already at its practical limit. */}
-          <Route path="/badges" element={<BadgesPage />} />
-          <Route path="/planner" element={<PlannerPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </main>
     </>
   )
 }

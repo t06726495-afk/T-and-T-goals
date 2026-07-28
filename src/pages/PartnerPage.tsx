@@ -108,7 +108,7 @@ export function PartnerPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-2xl font-semibold text-ink">Partner</h1>
+      <h1 className="text-3xl font-semibold text-ink">Partner</h1>
 
       {!partner ? (
         <div className="mt-6 rounded-2xl border border-border bg-surface p-6 text-center">

@@ -159,7 +159,7 @@ export function PlannerPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-2xl font-semibold text-ink">Planner</h1>
+      <h1 className="text-3xl font-semibold text-ink">Planner</h1>
       <p className="mt-1 text-sm text-ink-dim">
         Answer a few questions and get a weekly plan you can edit before saving.
       </p>
@@ -177,7 +177,7 @@ export function PlannerPage() {
       {step === 'objective' && (
         <StepCard
           question="What are you trying to achieve?"
-          hint="Be as specific as you like — this drives everything else."
+          hint="Be as specific as you like. This drives everything else."
           onNext={() => setStep('goals')}
         >
           <textarea
@@ -206,7 +206,7 @@ export function PlannerPage() {
       {step === 'goals' && (
         <StepCard
           question="Any existing goals to build around?"
-          hint="Optional — skip if this is something new."
+          hint="Optional. Skip if this is something new."
           onBack={() => setStep('objective')}
           onNext={() => setStep('days')}
         >
@@ -396,7 +396,7 @@ export function PlannerPage() {
                 ))}
               </ul>
               <p className="mt-3 text-xs text-ink-dim">
-                Tips are just guidance — they aren't saved as tasks.
+                Tips are just guidance. They aren't saved as tasks.
               </p>
             </div>
           )}

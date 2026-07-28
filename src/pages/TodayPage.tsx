@@ -23,8 +23,9 @@ export function TodayPage() {
 
   const [today, setToday] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])
-  const [counterGoals, setCounterGoals] = useState<Goal[]>([])
-  const [counterLogs, setCounterLogs] = useState<Map<string, GoalLog>>(new Map())
+  const [myGoals, setMyGoals] = useState<Goal[]>([])
+  const [goalLogs, setGoalLogs] = useState<Map<string, GoalLog>>(new Map())
+  const [scheduledGoalIds, setScheduledGoalIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [partner, setPartner] = useState<Profile | null>(null)
   const [partnerDone, setPartnerDone] = useState(0)
@@ -63,25 +64,40 @@ export function TodayPage() {
       .order('sort_order', { ascending: true })
     const allGoals = (goals as Goal[]) ?? []
     setGoalsById(new Map(allGoals.map((g) => [g.id, g])))
-    const counters = allGoals.filter((g) => g.kind === 'counter')
-    setCounterGoals(counters)
+    setMyGoals(allGoals)
 
-    if (counters.length > 0) {
+    // Goals that a recurring template already schedules. Those appear as
+    // tasks on the days they're due, so they must NOT also appear as a
+    // standalone row on the days they aren't: a Mon/Wed/Fri habit showing up
+    // every day would quietly undo the schedule you set.
+    const { data: templates } = await supabase
+      .from('task_templates')
+      .select('goal_id')
+      .eq('owner_id', profile.id)
+      .eq('is_active', true)
+      .not('goal_id', 'is', null)
+    setScheduledGoalIds(
+      new Set(((templates as { goal_id: string }[] | null) ?? []).map((t) => t.goal_id)),
+    )
+
+    // Today's log for every goal, not just counters: checkbox goals without a
+    // task template are now tickable here too, so they need their state.
+    if (allGoals.length > 0) {
       const { data: logs } = await supabase
         .from('goal_logs')
         .select('*')
         .in(
           'goal_id',
-          counters.map((g) => g.id),
+          allGoals.map((g) => g.id),
         )
         .eq('log_date', day)
       const map = new Map<string, GoalLog>()
       for (const log of (logs as GoalLog[] | null) ?? []) {
         map.set(log.goal_id, log)
       }
-      setCounterLogs(map)
+      setGoalLogs(map)
     } else {
-      setCounterLogs(new Map())
+      setGoalLogs(new Map())
     }
 
     // Partner strip. Driven by the pairing itself, NOT by whether she has
@@ -227,7 +243,7 @@ export function TodayPage() {
   }
 
   async function commitCounter(goal: Goal, nextCount: number) {
-    const existing = counterLogs.get(goal.id)
+    const existing = goalLogs.get(goal.id)
     const clamped = Math.max(0, nextCount)
     const target = goal.target_per_day ?? 1
     const nextCompleted = clamped >= target
@@ -243,7 +259,7 @@ export function TodayPage() {
       points_awarded: existing?.points_awarded ?? 0,
       created_at: existing?.created_at ?? new Date().toISOString(),
     }
-    setCounterLogs((prev) => new Map(prev).set(goal.id, optimistic))
+    setGoalLogs((prev) => new Map(prev).set(goal.id, optimistic))
 
     if (justHitTarget) {
       haptic('celebrate')
@@ -268,7 +284,7 @@ export function TodayPage() {
 
     if (error || !updated) return
 
-    setCounterLogs((prev) => new Map(prev).set(goal.id, updated as GoalLog))
+    setGoalLogs((prev) => new Map(prev).set(goal.id, updated as GoalLog))
 
     const prevPoints = existing?.points_awarded ?? 0
     const newPoints = (updated as GoalLog).points_awarded
@@ -284,14 +300,78 @@ export function TodayPage() {
     await refreshProfile()
   }
 
+  // Checkbox goals with no task behind them. Writing goal_logs directly is
+  // safe here precisely because there are no linked tasks: the tasks trigger
+  // only takes over a day that actually has some.
+  async function toggleGoal(goal: Goal) {
+    const existing = goalLogs.get(goal.id)
+    const nextCompleted = !(existing?.completed ?? false)
+
+    setGoalLogs((prev) =>
+      new Map(prev).set(goal.id, {
+        id: existing?.id ?? 'pending',
+        goal_id: goal.id,
+        owner_id: profile!.id,
+        log_date: today,
+        count: nextCompleted ? 1 : 0,
+        completed: nextCompleted,
+        points_awarded: existing?.points_awarded ?? 0,
+        created_at: existing?.created_at ?? new Date().toISOString(),
+      }),
+    )
+
+    if (nextCompleted) {
+      haptic('done')
+      setCelebrating(goal.id)
+      setTimeout(() => setCelebrating(null), 650)
+    }
+
+    const { data: updated, error } = await supabase
+      .from('goal_logs')
+      .upsert(
+        {
+          goal_id: goal.id,
+          owner_id: profile!.id,
+          log_date: today,
+          completed: nextCompleted,
+          count: nextCompleted ? 1 : 0,
+        },
+        { onConflict: 'goal_id,log_date' },
+      )
+      .select()
+      .single()
+
+    if (error || !updated) {
+      // Put the old state back rather than leaving a tick that didn't save.
+      setGoalLogs((prev) => {
+        const next = new Map(prev)
+        if (existing) next.set(goal.id, existing)
+        else next.delete(goal.id)
+        return next
+      })
+      return
+    }
+
+    setGoalLogs((prev) => new Map(prev).set(goal.id, updated as GoalLog))
+
+    const gained = (updated as GoalLog).points_awarded - (existing?.points_awarded ?? 0)
+    if (gained > 0) {
+      setFlash({ id: goal.id, points: gained })
+      setTimeout(() => setFlash(null), 1200)
+    }
+
+    if (nextCompleted) void announceGoalProgress(goal.id)
+    await refreshProfile()
+  }
+
   async function adjustCounter(goal: Goal, delta: number) {
     if (delta > 0) haptic('tick')
-    const existing = counterLogs.get(goal.id)
+    const existing = goalLogs.get(goal.id)
     await commitCounter(goal, (existing?.count ?? 0) + delta)
   }
 
   function startEditingCount(goal: Goal) {
-    const existing = counterLogs.get(goal.id)
+    const existing = goalLogs.get(goal.id)
     setEditingCount(goal.id)
     setEditingCountValue((existing?.count ?? 0).toString())
   }
@@ -306,12 +386,33 @@ export function TodayPage() {
 
   const pointsToday =
     tasks.filter((t) => t.done).reduce((sum, t) => sum + t.points_awarded, 0) +
-    [...counterLogs.values()].reduce((sum, l) => sum + l.points_awarded, 0)
+    [...goalLogs.values()].reduce((sum, l) => sum + l.points_awarded, 0)
+
+  const counterGoals = myGoals.filter((g) => g.kind === 'counter')
+
+  // Checkbox goals with nothing scheduling them. These used to be invisible
+  // here, tickable only by opening the year grid from the Goals screen, which
+  // meant "today" wasn't actually the whole of today.
+  const goalIdsWithTasks = new Set(tasks.map((t) => t.goal_id).filter(Boolean))
+  const standaloneGoals = myGoals.filter(
+    (g) =>
+      g.kind === 'checkbox' && !goalIdsWithTasks.has(g.id) && !scheduledGoalIds.has(g.id),
+  )
 
   const grouped = TIME_ORDER.map((tod) => ({
     tod,
     items: tasks.filter((t) => t.time_of_day === tod),
   })).filter((g) => g.items.length > 0)
+
+  // One number for the whole day: tasks, counters and standalone goals all
+  // count as one thing each, so the ring means "how much of today is done"
+  // rather than "how many of one particular kind of row".
+  const dayTotal = tasks.length + counterGoals.length + standaloneGoals.length
+  const dayDone =
+    tasks.filter((t) => t.done).length +
+    counterGoals.filter((g) => goalLogs.get(g.id)?.completed).length +
+    standaloneGoals.filter((g) => goalLogs.get(g.id)?.completed).length
+  const dayFraction = dayTotal === 0 ? 0 : dayDone / dayTotal
 
   // Goals the planner split into several tasks for today. Shown only when
   // there's more than one, because that's exactly the case where "the goal
@@ -324,7 +425,7 @@ export function TodayPage() {
     })
     .filter((entry) => entry.goal?.kind === 'checkbox' && entry.total > 1)
 
-  const hasNothing = tasks.length === 0 && counterGoals.length === 0
+  const hasNothing = dayTotal === 0
 
   if (!profile || loading) {
     return <div className="mx-auto max-w-2xl px-4 py-6 text-ink-dim">Loading…</div>
@@ -332,26 +433,50 @@ export function TodayPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-ink">
+          <p className="text-sm text-ink-dim">
             {new Date(`${today}T00:00:00`).toLocaleDateString(undefined, {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
             })}
+          </p>
+          <h1 className="mt-0.5 text-3xl font-semibold text-ink">
+            {dayTotal === 0 ? (
+              'Today'
+            ) : dayDone === dayTotal ? (
+              'All done'
+            ) : (
+              <>
+                <span className="tabular">{dayDone}</span>
+                <span className="text-ink-dim"> of </span>
+                <span className="tabular">{dayTotal}</span>
+              </>
+            )}
           </h1>
-          <p className="mt-1 text-mine">{pointsToday} points today</p>
+          <p className="mt-1 text-sm text-ink-dim">
+            <span className="tabular text-mine">{pointsToday}</span> points today
+          </p>
         </div>
+
+        {/* One focal point for the screen. The ring is the day; the level chip
+            underneath is the long game. */}
         <button
           type="button"
           onClick={() => navigate('/points')}
-          className="shrink-0 text-right"
-          aria-label="View points"
+          className="shrink-0 transition-transform active:scale-95"
+          aria-label={`Level ${profile.current_level}. View points`}
         >
-          <p className="text-[10px] uppercase tracking-wide text-ink-dim">Level</p>
-          <p className="text-2xl font-bold leading-none text-mine">{profile.current_level}</p>
-          <div className="mt-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-surface-raised">
+          <ProgressRing progress={dayFraction} color="var(--color-mine)" size={78} strokeWidth={5}>
+            <span className="text-center">
+              <span className="block text-[9px] uppercase tracking-wider text-ink-dim">Level</span>
+              <span className="tabular block text-2xl font-bold leading-none text-mine">
+                {profile.current_level}
+              </span>
+            </span>
+          </ProgressRing>
+          <div className="mx-auto mt-1.5 h-1 w-12 overflow-hidden rounded-full bg-surface-raised">
             <div
               className="h-full rounded-full bg-mine transition-all duration-500"
               style={{
@@ -415,7 +540,7 @@ export function TodayPage() {
       {counterGoals.length > 0 && (
         <div className="mt-6 space-y-2">
           {counterGoals.map((goal) => {
-            const log = counterLogs.get(goal.id)
+            const log = goalLogs.get(goal.id)
             const count = log?.count ?? 0
             const target = goal.target_per_day ?? 1
             return (
@@ -490,6 +615,70 @@ export function TodayPage() {
                   </ProgressRing>
                 </span>
                 {celebrating === goal.id && <Confetti />}
+                {flash?.id === goal.id && (
+                  <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
+                    +{flash.points}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {standaloneGoals.length > 0 && (
+        <div className="mt-6 space-y-2">
+          {standaloneGoals.map((goal) => {
+            const done = goalLogs.get(goal.id)?.completed ?? false
+            return (
+              <div key={goal.id} className="relative">
+                <button
+                  type="button"
+                  onClick={() => void toggleGoal(goal)}
+                  className="flex min-h-14 w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors active:scale-[0.995]"
+                  style={{
+                    borderColor: done ? goal.color : 'var(--color-border)',
+                    backgroundColor: done ? `${goal.color}14` : 'var(--color-surface)',
+                  }}
+                >
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                    {celebrating === goal.id && (
+                      <span
+                        className="animate-ring-burst absolute inset-0 rounded-full border-2"
+                        style={{ borderColor: goal.color }}
+                      />
+                    )}
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-bg ${
+                        celebrating === goal.id ? 'animate-check-bounce' : ''
+                      }`}
+                      style={{
+                        borderColor: done ? goal.color : 'var(--color-border)',
+                        backgroundColor: done ? goal.color : 'transparent',
+                      }}
+                    >
+                      <AnimatedCheck done={done} celebrating={celebrating === goal.id} />
+                    </span>
+                  </span>
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
+                    style={{ backgroundColor: `${goal.color}26` }}
+                  >
+                    {goal.emoji}
+                  </span>
+                  <span
+                    className={`flex-1 transition-colors duration-300 ${done ? 'text-ink-dim' : 'text-ink'}`}
+                  >
+                    <span
+                      className={`strike-wrap ${done ? 'is-struck' : ''} ${
+                        celebrating === goal.id ? 'is-animating' : ''
+                      }`}
+                    >
+                      {goal.title}
+                    </span>
+                  </span>
+                  {celebrating === goal.id && <Confetti />}
+                </button>
                 {flash?.id === goal.id && (
                   <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
                     +{flash.points}
@@ -623,7 +812,7 @@ export function TodayPage() {
         <div className="mt-6 rounded-2xl border border-border bg-surface p-6 text-center">
           <p className="text-ink">Nothing set up yet</p>
           <p className="mt-1 text-sm text-ink-dim">
-            Add a goal and it'll show up here every day.
+            Add a goal and it shows up here every day, ready to tick off.
           </p>
           <button
             type="button"
