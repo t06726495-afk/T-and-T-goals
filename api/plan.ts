@@ -60,6 +60,19 @@ function coerceDay(value: unknown): number | null {
   return null
 }
 
+// Time benchmarks are stored as SECONDS, so a sub-7:30 mile is 450. Printing
+// the raw number told the model to aim for "under 450", which it can only
+// read as 450 of something. Mirrors formatValue in src/lib/benchmarks.ts.
+function describeValue(value: number | null, format: string, unit: string | null): string {
+  if (value === null || value === undefined) return 'unknown'
+  if (format === 'time') {
+    const total = Math.max(0, Math.round(value))
+    return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`
+  }
+  const rounded = Math.round(value * 100) / 100
+  return unit ? `${rounded} ${unit}` : `${rounded}`
+}
+
 function coerceString(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -204,15 +217,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const { goal_ids, objective, days_per_week, time_of_day, minutes_per_day, constraints } =
-    (req.body ?? {}) as {
-      goal_ids?: string[]
-      objective?: string
-      days_per_week?: number
-      time_of_day?: string
-      minutes_per_day?: number
-      constraints?: string
-    }
+  const {
+    goal_ids,
+    benchmark_ids,
+    objective,
+    days_per_week,
+    time_of_day,
+    minutes_per_day,
+    constraints,
+  } = (req.body ?? {}) as {
+    goal_ids?: string[]
+    benchmark_ids?: string[]
+    objective?: string
+    days_per_week?: number
+    time_of_day?: string
+    minutes_per_day?: number
+    constraints?: string
+  }
 
   try {
     const supabase = userClient(token)
@@ -238,14 +259,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: benchmarks } = await supabase
       .from('benchmarks')
-      .select('title, target_value, unit, direction, value_format, best_value, goal_id')
+      .select('id, title, target_value, unit, direction, value_format, best_value, goal_id')
       .eq('owner_id', me)
       .eq('is_active', true)
       .is('achieved_at', null)
 
-    const relevantBenchmarks = (benchmarks ?? []).filter(
-      (b) => !b.goal_id || validGoalIds.has(b.goal_id as string),
-    )
+    // If the user picked specific targets, plan for exactly those. Otherwise
+    // fall back to the open benchmarks attached to the goals they chose,
+    // rather than every target they've ever set: an unfocused list of six
+    // targets produces an unfocused plan.
+    const picked = new Set(benchmark_ids ?? [])
+    const relevantBenchmarks =
+      picked.size > 0
+        ? (benchmarks ?? []).filter((b) => picked.has(b.id as string))
+        : (benchmarks ?? []).filter(
+            (b) => !b.goal_id || validGoalIds.has(b.goal_id as string),
+          )
 
     const userPrompt = [
       'Build a weekly plan.',
@@ -265,15 +294,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : '- (none selected; use null for goal_id)',
       '',
       relevantBenchmarks.length > 0
-        ? `Targets they are working toward:\n${relevantBenchmarks
-            .map(
-              (b) =>
-                `- "${b.title}": aiming for ${b.direction === 'lower' ? 'under' : 'at least'} ${
-                  b.target_value
-                }${b.unit ? ` ${b.unit}` : ''}${
-                  b.best_value != null ? ` (currently ${b.best_value})` : ''
-                }`,
-            )
+        ? `${
+            picked.size > 0
+              ? 'THE PLAN MUST BUILD TOWARD THESE TARGETS. They are the point of the plan:'
+              : 'Targets they are working toward:'
+          }\n${relevantBenchmarks
+            .map((b) => {
+              const format = b.value_format as string
+              const unit = (b.unit as string | null) ?? null
+              const target = describeValue(b.target_value as number, format, unit)
+              const current =
+                b.best_value != null
+                  ? ` Best so far: ${describeValue(b.best_value as number, format, unit)}.`
+                  : ' Nothing logged yet.'
+              return `- "${b.title}": aiming for ${
+                b.direction === 'lower' ? 'under' : 'at least'
+              } ${target}.${current}`
+            })
             .join('\n')}`
         : '',
       '',

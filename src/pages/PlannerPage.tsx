@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { DIFFICULTY_OPTIONS } from '../lib/pickers'
 import { timeOfDayLabel } from '../lib/date'
-import type { Difficulty, Goal, TimeOfDay } from '../lib/types'
+import { formatValue } from '../lib/benchmarks'
+import type { Benchmark, Difficulty, Goal, TimeOfDay } from '../lib/types'
 
 interface PlanTemplate {
   title: string
@@ -29,6 +30,7 @@ const OBJECTIVE_EXAMPLES = [
 type Step =
   | 'objective'
   | 'goals'
+  | 'benchmarks'
   | 'days'
   | 'time'
   | 'minutes'
@@ -48,9 +50,11 @@ export function PlannerPage() {
   const navigate = useNavigate()
 
   const [goals, setGoals] = useState<Goal[]>([])
+  const [benchmarks, setBenchmarks] = useState<Benchmark[]>([])
   const [step, setStep] = useState<Step>('objective')
   const [objective, setObjective] = useState('')
   const [selectedGoals, setSelectedGoals] = useState<string[]>([])
+  const [selectedBenchmarks, setSelectedBenchmarks] = useState<string[]>([])
   const [daysPerWeek, setDaysPerWeek] = useState(4)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('any')
   const [minutes, setMinutes] = useState(30)
@@ -62,13 +66,25 @@ export function PlannerPage() {
 
   const load = useCallback(async () => {
     if (!profile) return
-    const { data } = await supabase
-      .from('goals')
-      .select('*')
-      .eq('owner_id', profile.id)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true })
-    setGoals((data as Goal[]) ?? [])
+    const [{ data: goalRows }, { data: benchmarkRows }] = await Promise.all([
+      supabase
+        .from('goals')
+        .select('*')
+        .eq('owner_id', profile.id)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true }),
+      // Only targets still open: there's nothing to plan toward on one that's
+      // already been hit.
+      supabase
+        .from('benchmarks')
+        .select('*')
+        .eq('owner_id', profile.id)
+        .eq('is_active', true)
+        .is('achieved_at', null)
+        .order('created_at', { ascending: true }),
+    ])
+    setGoals((goalRows as Goal[]) ?? [])
+    setBenchmarks((benchmarkRows as Benchmark[]) ?? [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
@@ -89,6 +105,7 @@ export function PlannerPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           goal_ids: selectedGoals,
+          benchmark_ids: selectedBenchmarks,
           objective,
           days_per_week: daysPerWeek,
           time_of_day: timeOfDay,
@@ -157,6 +174,18 @@ export function PlannerPage() {
     return <div className="mx-auto max-w-2xl px-4 py-6 text-ink-dim">Loading…</div>
   }
 
+  // The benchmark step is skipped entirely when there's nothing to pick, so
+  // the progress dots shouldn't promise a step that never arrives.
+  const questionSteps: Step[] = [
+    'objective',
+    'goals',
+    ...(benchmarks.length > 0 ? (['benchmarks'] as Step[]) : []),
+    'days',
+    'time',
+    'minutes',
+    'constraints',
+  ]
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <h1 className="text-3xl font-semibold text-ink">Planner</h1>
@@ -165,7 +194,7 @@ export function PlannerPage() {
       </p>
 
       {step !== 'preview' && step !== 'loading' && (
-        <StepDots current={step} />
+        <StepDots current={step} steps={questionSteps} />
       )}
 
       {error && (
@@ -208,7 +237,7 @@ export function PlannerPage() {
           question="Any existing goals to build around?"
           hint="Optional. Skip if this is something new."
           onBack={() => setStep('objective')}
-          onNext={() => setStep('days')}
+          onNext={() => setStep(benchmarks.length > 0 ? 'benchmarks' : 'days')}
         >
           {goals.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-4 text-center">
@@ -252,10 +281,56 @@ export function PlannerPage() {
         </StepCard>
       )}
 
+      {step === 'benchmarks' && (
+        <StepCard
+          question="Working toward a target?"
+          hint="Optional. Picking one makes the plan build up to it."
+          onBack={() => setStep('goals')}
+          onNext={() => setStep('days')}
+        >
+          <div className="space-y-2">
+            {benchmarks.map((b) => {
+              const on = selectedBenchmarks.includes(b.id)
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedBenchmarks((prev) =>
+                      on ? prev.filter((id) => id !== b.id) : [...prev, b.id],
+                    )
+                  }
+                  className={`flex min-h-14 w-full items-center gap-3 rounded-xl border p-3 text-left ${
+                    on ? 'border-mine bg-mine/10' : 'border-border bg-surface-raised'
+                  }`}
+                >
+                  <span className="text-xl">{b.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-ink">{b.title}</span>
+                    <span className="block text-xs text-ink-dim">
+                      {b.direction === 'lower' ? 'Under' : 'At least'}{' '}
+                      {formatValue(b.target_value, b.value_format, b.unit)}
+                      {b.best_value != null && (
+                        <> · best {formatValue(b.best_value, b.value_format, b.unit)}</>
+                      )}
+                    </span>
+                  </span>
+                  {on && <span className="text-mine">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-xs text-ink-dim">
+            Pick nothing and the plan still considers any targets tied to the goals
+            you chose.
+          </p>
+        </StepCard>
+      )}
+
       {step === 'days' && (
         <StepCard
           question="How many days a week?"
-          onBack={() => setStep('goals')}
+          onBack={() => setStep(benchmarks.length > 0 ? 'benchmarks' : 'goals')}
           onNext={() => setStep('time')}
         >
           <div className="grid grid-cols-4 gap-2">
@@ -424,12 +499,11 @@ export function PlannerPage() {
   )
 }
 
-function StepDots({ current }: { current: Step }) {
-  const order: Step[] = ['objective', 'goals', 'days', 'time', 'minutes', 'constraints']
-  const index = order.indexOf(current)
+function StepDots({ current, steps }: { current: Step; steps: Step[] }) {
+  const index = steps.indexOf(current)
   return (
     <div className="mt-4 flex gap-1.5">
-      {order.map((s, i) => (
+      {steps.map((s, i) => (
         <span
           key={s}
           className="h-1 flex-1 rounded-full transition-colors"
