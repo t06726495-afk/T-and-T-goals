@@ -1,17 +1,63 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
+import type { AuthError } from '@supabase/supabase-js'
+
+// Supabase builds an error message by reaching for msg / message /
+// error_description / error on the response body, and falls back to
+// JSON.stringify when it finds none. An unclassified database failure comes
+// back with an empty body, so that fallback renders the literal string "{}"
+// on screen. Never show that to someone trying to sign in.
+function isUnusable(message: string): boolean {
+  const trimmed = message.trim()
+  return trimmed === '' || trimmed === '{}' || trimmed === '[object Object]'
+}
+
+interface FriendlyError {
+  message: string
+  /** Kept for the small print, so a real problem is still diagnosable. */
+  detail?: string
+}
+
+function describeAuthError(error: AuthError): FriendlyError {
+  const raw = error.message ?? ''
+  const lower = raw.toLowerCase()
+
+  if (lower.includes('invite') || lower.includes('not allowed')) {
+    return { message: "This email isn't on the invite list for mogging." }
+  }
+
+  if (lower.includes('rate limit') || error.status === 429) {
+    return {
+      message: 'Too many codes requested. Wait a few minutes and try again.',
+    }
+  }
+
+  // A signup blocked by the invite-list trigger surfaces as a database error,
+  // because the trigger fires while the account row is being created. It is
+  // by far the most likely reason a brand new email fails here.
+  if (lower.includes('database error') || isUnusable(raw)) {
+    return {
+      message:
+        "Couldn't start sign-in for this email. If this is your first time here, " +
+        'it may not be on the invite list yet.',
+      detail: isUnusable(raw) ? `Status ${error.status ?? 'unknown'}` : raw,
+    }
+  }
+
+  return { message: raw }
+}
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [verifying, setVerifying] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [failure, setFailure] = useState<FriendlyError | null>(null)
 
   async function handleSendCode(e: FormEvent) {
     e.preventDefault()
     setStatus('sending')
-    setErrorMessage('')
+    setFailure(null)
 
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -20,11 +66,7 @@ export function LoginPage() {
 
     if (error) {
       setStatus('error')
-      setErrorMessage(
-        error.message.toLowerCase().includes('invite')
-          ? "This email isn't invited to mogging."
-          : error.message,
-      )
+      setFailure(describeAuthError(error))
       return
     }
 
@@ -34,7 +76,7 @@ export function LoginPage() {
   async function handleVerifyCode(e: FormEvent) {
     e.preventDefault()
     setVerifying(true)
-    setErrorMessage('')
+    setFailure(null)
 
     const { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
@@ -44,7 +86,7 @@ export function LoginPage() {
 
     setVerifying(false)
     if (error) {
-      setErrorMessage(error.message)
+      setFailure(describeAuthError(error))
       return
     }
     // On success, AuthProvider's onAuthStateChange picks up the new session
@@ -83,13 +125,13 @@ export function LoginPage() {
               >
                 {verifying ? 'Checking…' : 'Verify code'}
               </button>
-              {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}
+              <ErrorNote failure={failure} />
               <button
                 type="button"
                 onClick={() => {
                   setStatus('idle')
                   setCode('')
-                  setErrorMessage('')
+                  setFailure(null)
                 }}
                 className="w-full text-center text-sm text-ink-dim underline"
               >
@@ -116,12 +158,20 @@ export function LoginPage() {
             >
               {status === 'sending' ? 'Sending…' : 'Send sign-in code'}
             </button>
-            {status === 'error' && (
-              <p className="text-sm text-danger">{errorMessage}</p>
-            )}
+            {status === 'error' && <ErrorNote failure={failure} />}
           </form>
         )}
       </div>
+    </div>
+  )
+}
+
+function ErrorNote({ failure }: { failure: FriendlyError | null }) {
+  if (!failure) return null
+  return (
+    <div className="rounded-xl border border-danger/30 bg-danger/10 p-3">
+      <p className="text-sm text-danger">{failure.message}</p>
+      {failure.detail && <p className="mt-1 text-xs text-ink-dim">{failure.detail}</p>}
     </div>
   )
 }
