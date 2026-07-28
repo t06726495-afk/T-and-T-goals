@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { forceRefresh } from '../lib/sw-update'
 
 function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent)
@@ -9,6 +10,28 @@ function isStandalone() {
     window.matchMedia('(display-mode: standalone)').matches ||
     // iOS Safari's pre-standard flag
     (navigator as Navigator & { standalone?: boolean }).standalone === true
+  )
+}
+
+// An installed PWA is resumed rather than restarted, so it can keep serving
+// an old build long after a new one has shipped. The app reloads itself when
+// it notices one, but this is the button for when you know an update exists
+// and don't want to wait for it to be noticed.
+function UpdateButton() {
+  const [busy, setBusy] = useState(false)
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true)
+        void forceRefresh()
+      }}
+      className="mt-3 min-h-11 w-full rounded-xl border border-border px-4 py-2 text-sm font-medium text-ink-dim disabled:opacity-60"
+    >
+      {busy ? 'Reloading…' : 'Check for updates'}
+    </button>
   )
 }
 
@@ -33,7 +56,8 @@ export function InstallStatus() {
   if (standalone) {
     return (
       <div className="rounded-2xl border border-mine/30 bg-mine/10 p-4 text-sm text-ink">
-        ✅ Installed. You're running this as a standalone app.
+        <p>✅ Installed. You're running this as a standalone app.</p>
+        <UpdateButton />
       </div>
     )
   }
