@@ -17,6 +17,10 @@ import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
 
+function sameName(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
 // Extracted so a task looks identical whether it sits under a goal or in a
 // plain time-of-day list. Inside a goal group the goal's emoji is already on
 // the header, so it's dropped from the row.
@@ -294,6 +298,17 @@ export function TodayPage() {
       setTimeout(() => setFlash(null), 1200)
     }
 
+    // If this goal has a same-named placeholder task standing in for the goal
+    // itself, it's hidden behind the group header, so nothing would ever tick
+    // it by hand. Bring it along with its siblings, or the goal can never
+    // complete.
+    if (task.goal_id) {
+      await syncParentTask(
+        task.goal_id,
+        tasks.map((t) => (t.id === task.id ? (updated as Task) : t)),
+      )
+    }
+
     // The parent goal is crossed off by a database trigger, and only once
     // EVERY task linked to it that day is done — one set of squats doesn't
     // finish "get stronger". So read back what the trigger decided rather
@@ -314,6 +329,35 @@ export function TodayPage() {
     // Pull the server-updated points_total/current_level so the level bar
     // in the header moves as you complete things.
     await refreshProfile()
+  }
+
+  // Keeps the hidden placeholder task in step with the ones shown under it.
+  // Only touches a task whose title matches its goal's, which is the one the
+  // group header is standing in for.
+  async function syncParentTask(goalId: string, snapshot: Task[]) {
+    const goal = goalsById.get(goalId)
+    if (!goal) return
+
+    const group = snapshot.filter((t) => t.goal_id === goalId)
+    const parent = group.find((t) => sameName(t.title, goal.title))
+    if (!parent) return
+
+    const children = group.filter((t) => t.id !== parent.id)
+    if (children.length === 0) return
+
+    const shouldBeDone = children.every((t) => t.done)
+    if (shouldBeDone === parent.done) return
+
+    const { data } = await supabase
+      .from('tasks')
+      .update({ done: shouldBeDone })
+      .eq('id', parent.id)
+      .select()
+      .single()
+
+    if (data) {
+      setTasks((prev) => prev.map((t) => (t.id === parent.id ? (data as Task) : t)))
+    }
   }
 
   // Tells the partner about a completion. The endpoint re-checks that the
@@ -510,10 +554,23 @@ export function TodayPage() {
   }
 
   const goalGroups = [...tasksByGoal.entries()]
-    .map(([goalId, items]) => ({ goal: goalsById.get(goalId), items }))
+    .map(([goalId, items]) => {
+      const goal = goalsById.get(goalId)
+      // A goal whose own template makes a task with the same name as the goal
+      // ("Workout" inside "Workout") would otherwise show up twice: once as
+      // the group header, once as a row under it. Treat that task as the
+      // header's own record and don't render it separately.
+      const parent = goal ? items.find((t) => sameName(t.title, goal.title)) : undefined
+      const children = parent ? items.filter((t) => t.id !== parent.id) : items
+      return { goal, parent, children, items }
+    })
     .filter(
-      (entry): entry is { goal: Goal; items: Task[] } =>
-        entry.goal?.kind === 'checkbox' && entry.items.length > 1,
+      (entry): entry is {
+        goal: Goal
+        parent: Task | undefined
+        children: Task[]
+        items: Task[]
+      } => entry.goal?.kind === 'checkbox' && entry.items.length > 1 && entry.children.length > 0,
     )
 
   const groupedTaskIds = new Set(goalGroups.flatMap((g) => g.items.map((t) => t.id)))
@@ -806,9 +863,9 @@ export function TodayPage() {
           the tasks nested under it. The goal's own checkbox is derived, not
           tappable: it ticks itself the moment the last task under it is
           done, which is the whole point. */}
-      {goalGroups.map(({ goal, items }) => {
-        const doneCount = items.filter((t) => t.done).length
-        const complete = doneCount === items.length
+      {goalGroups.map(({ goal, children }) => {
+        const doneCount = children.filter((t) => t.done).length
+        const complete = doneCount === children.length
         return (
           <div key={goal.id} className="mt-6">
             <div
@@ -840,7 +897,7 @@ export function TodayPage() {
                 className="tabular shrink-0 text-sm font-medium"
                 style={{ color: complete ? goal.color : 'var(--color-ink-dim)' }}
               >
-                {doneCount}/{items.length}
+                {doneCount}/{children.length}
               </span>
             </div>
 
@@ -849,7 +906,7 @@ export function TodayPage() {
               className="mt-2 space-y-2 border-l pl-3"
               style={{ borderColor: `${goal.color}40`, marginLeft: '1.25rem' }}
             >
-              {items.map((task) => (
+              {children.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}

@@ -13,24 +13,64 @@ const PAD_X = 6
 const PAD_TOP = 12
 const PAD_BOTTOM = 20
 
-// Catmull-Rom -> cubic bezier, so the trend line reads as a smooth curve
-// rather than a jagged polyline. Plain SVG, no charting library (the stack
-// is deliberately dependency-light).
+// Monotone cubic interpolation (Fritsch-Carlson), rendered as cubic beziers.
+//
+// The obvious choice here is Catmull-Rom, and it was what this used, but
+// Catmull-Rom overshoots: after a flat run followed by a jump, it dips BELOW
+// the flat part before climbing and then arcs above the peak before settling.
+// On a running points total that's a curve claiming you lost points you never
+// lost. Fritsch-Carlson limits the tangents so the curve can never leave the
+// range of the data it connects. Flat stays flat, and a rise only rises.
+//
+// Plain SVG, no charting library: the stack is deliberately dependency-light.
 function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length === 0) return ''
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
+  const n = pts.length
+  if (n === 0) return ''
+  if (n === 1) return `M ${pts[0].x} ${pts[0].y}`
+  if (n === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`
+
+  // Secant slope of each segment.
+  const slopes: number[] = []
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x
+    slopes.push(dx === 0 ? 0 : (pts[i + 1].y - pts[i].y) / dx)
+  }
+
+  // Start with the average of the neighbouring secants at each interior point.
+  const tangents: number[] = new Array(n)
+  tangents[0] = slopes[0]
+  tangents[n - 1] = slopes[n - 2]
+  for (let i = 1; i < n - 1; i++) {
+    tangents[i] =
+      slopes[i - 1] * slopes[i] <= 0 ? 0 : (slopes[i - 1] + slopes[i]) / 2
+  }
+
+  // Then rein them in. A flat segment pins both its tangents to zero, and the
+  // circle constraint keeps the rest inside the monotone region.
+  for (let i = 0; i < n - 1; i++) {
+    if (slopes[i] === 0) {
+      tangents[i] = 0
+      tangents[i + 1] = 0
+      continue
+    }
+    const a = tangents[i] / slopes[i]
+    const b = tangents[i + 1] / slopes[i]
+    const h = a * a + b * b
+    if (h > 9) {
+      const t = 3 / Math.sqrt(h)
+      tangents[i] = t * a * slopes[i]
+      tangents[i + 1] = t * b * slopes[i]
+    }
+  }
 
   let d = `M ${pts[0].x} ${pts[0].y}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[i + 2] ?? p2
-    const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
-    const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
-    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x
+    const c1x = pts[i].x + dx / 3
+    const c1y = pts[i].y + (tangents[i] * dx) / 3
+    const c2x = pts[i + 1].x - dx / 3
+    const c2y = pts[i + 1].y - (tangents[i + 1] * dx) / 3
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${pts[i + 1].x} ${pts[i + 1].y}`
   }
   return d
 }
