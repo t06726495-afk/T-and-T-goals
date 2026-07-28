@@ -141,27 +141,48 @@ invite-only" message instead of an account.
    stay on for anyone to sign in at all; the allowlist trigger from Step 5 is
    what actually restricts it to just you two.
 
-## 7. Set up reliable email delivery (Resend)
+## 7. Set up reliable email delivery (Brevo)
 
-Supabase's built-in email sender is capped at **2 emails per hour** — fine to
-discover once, not fine to actually use. Route auth emails through
-[Resend](https://resend.com) instead (free tier: 3,000 emails/month, no
-domain verification needed to get started).
+Supabase's built-in email sender is capped at **2 emails per hour**, and on
+newer projects it only delivers to your own team's addresses. Fine to
+discover once, not fine to actually use. Auth emails need to go through a
+real sending service.
 
-1. Sign up at [resend.com](https://resend.com).
-2. In the Resend dashboard, go to **API Keys → Create API Key**. Name it
-   anything, leave permissions default, click **Create**, and **copy the key
-   immediately** (starts with `re_...`) — Resend won't show it again.
-3. Back in Supabase: **Authentication → Emails → SMTP Settings**.
-4. Toggle **Enable custom SMTP** on and fill in:
-   - **Sender email**: `onboarding@resend.dev` (Resend's shared test sender —
-     works immediately, no setup)
+> **Why not Resend?** It's a good service, but its free tier will only
+> deliver to the address you signed up with until you verify a **domain you
+> own**. That's invisible while you're testing on yourself, and then the
+> second person you invite can never sign in: their request is rejected
+> before an email is created, and Supabase reports it as a generic 500. If
+> you own a domain, Resend is a fine choice. If you don't, use Brevo, which
+> verifies a single **email address** instead.
+
+1. Sign up at [brevo.com](https://www.brevo.com). The free tier sends 300
+   emails a day, which is far more than two people signing in ever needs.
+2. Verify the address you'll send from. Go to **Senders, Domains &
+   Dedicated IPs → Senders → Add a sender**, enter your own email, and click
+   the link Brevo emails you.
+3. Get the SMTP credentials: click your account name (top right) → **SMTP &
+   API** → the **SMTP** tab. You need two values from this page:
+   - **Login** — an address ending in `@smtp-brevo.com`. This is *not* your
+     account email, and it's the single most common thing to get wrong here.
+   - **SMTP key** — click **Generate a new SMTP key** and copy it
+     immediately.
+4. In Supabase: **Authentication → Emails → SMTP Settings**.
+5. Toggle **Enable custom SMTP** on and fill in:
+   - **Sender email**: the address you verified in step 2
    - **Sender name**: `mogging`
-   - **Host**: `smtp.resend.com`
-   - **Port**: `465`
-   - **Username**: `resend`
-   - **Password**: the Resend API key from step 2
-5. Click **Save changes**.
+   - **Host**: `smtp-relay.brevo.com`
+   - **Port**: `587`
+   - **Username**: the `@smtp-brevo.com` login from step 3
+   - **Password**: the SMTP key from step 3
+6. Click **Save changes**.
+
+> **If the first email lands in spam**, that's the sender address. Sending
+> from a `@gmail.com` or `@outlook.com` address is allowed, but those
+> providers publish rules saying only they should send as themselves, so
+> strict receivers (iCloud especially) treat it with suspicion. It usually
+> still arrives, just in the spam folder. Marking it "not spam" once is
+> normally enough. Verifying a domain you own is the permanent fix.
 6. Now go to **Authentication → Emails → Templates**, open the **Magic
    Link** template, and make sure the body includes `{{ .Token }}` somewhere
    visible (this is the 6-digit code) — not just `{{ .ConfirmationURL }}`.
