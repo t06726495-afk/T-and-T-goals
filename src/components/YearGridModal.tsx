@@ -86,7 +86,23 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
   const longest = longestStreak(completedDates, year, today)
   const elapsed = daysElapsedInYear(year, today)
   const completedCount = completedDates.size
-  const pct = elapsed > 0 ? Math.round((completedCount / elapsed) * 100) : 0
+
+  // Counter goals get partial credit. Reading 15 minutes against a 30 minute
+  // target every single day is 50% of the target, not 0% of the year, and
+  // scoring it as zero made consistent-but-short days look like nothing at
+  // all. Checkbox goals have no partial state, so they stay all-or-nothing.
+  const pct = useMemo(() => {
+    if (elapsed <= 0) return 0
+    if (goal.kind === 'checkbox') return Math.round((completedCount / elapsed) * 100)
+
+    const target = goal.target_per_day ?? 1
+    let credit = 0
+    for (const [date, log] of logs) {
+      if (!date.startsWith(`${year}-`)) continue
+      credit += Math.min(1, (log.count ?? 0) / target)
+    }
+    return Math.round((credit / elapsed) * 100)
+  }, [logs, year, elapsed, completedCount, goal.kind, goal.target_per_day])
 
   const editableFrom = shiftDate(today, -7)
 
@@ -141,7 +157,10 @@ export function YearGridModal({ goal, onClose, readOnly }: YearGridModalProps) {
           <Stat label="Streak" value={`${streak}`} />
           <Stat label="Longest" value={`${longest}`} />
           <Stat label="Days done" value={`${completedCount}`} />
-          <Stat label="This year" value={`${pct}%`} />
+          <Stat
+            label={goal.kind === 'counter' ? 'Of target' : 'This year'}
+            value={`${pct}%`}
+          />
         </div>
 
         <div className="mt-4 flex items-center justify-center gap-4">

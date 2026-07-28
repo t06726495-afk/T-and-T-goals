@@ -17,6 +17,104 @@ import type { Goal, GoalLog, Profile, Task, TimeOfDay } from '../lib/types'
 
 const TIME_ORDER: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'any']
 
+// Extracted so a task looks identical whether it sits under a goal or in a
+// plain time-of-day list. Inside a goal group the goal's emoji is already on
+// the header, so it's dropped from the row.
+function TaskRow({
+  task,
+  goal,
+  celebrating,
+  flashPoints,
+  expanded,
+  onToggle,
+  onToggleNotes,
+}: {
+  task: Task
+  goal?: Goal
+  celebrating: boolean
+  flashPoints: number | null
+  expanded: boolean
+  onToggle: () => void
+  onToggleNotes: () => void
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
+          task.done ? 'border-mine/30 bg-mine/10' : 'border-border bg-surface'
+        }`}
+      >
+        <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+          {celebrating && (
+            <span className="animate-ring-burst absolute inset-0 rounded-full border-2 border-mine" />
+          )}
+          <span
+            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-bg ${
+              task.done ? 'border-mine bg-mine' : 'border-border'
+            } ${celebrating ? 'animate-check-bounce' : ''}`}
+          >
+            <AnimatedCheck done={task.done} celebrating={celebrating} />
+          </span>
+        </span>
+        {goal && (
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
+            style={{ backgroundColor: `${goal.color}26` }}
+          >
+            {goal.emoji}
+          </span>
+        )}
+        <span
+          className={`flex-1 transition-colors duration-300 ${task.done ? 'text-ink-dim' : 'text-ink'}`}
+        >
+          <span
+            className={`strike-wrap ${task.done ? 'is-struck' : ''} ${
+              celebrating ? 'is-animating' : ''
+            }`}
+          >
+            {task.title}
+          </span>
+        </span>
+        {task.notes && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Show details"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleNotes()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                e.stopPropagation()
+                onToggleNotes()
+              }
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-dim"
+          >
+            {expanded ? '▴' : '▾'}
+          </span>
+        )}
+        {celebrating && <Confetti />}
+      </button>
+
+      {task.notes && expanded && (
+        <p className="mt-1 whitespace-pre-line rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm text-ink-dim">
+          {task.notes}
+        </p>
+      )}
+      {flashPoints !== null && (
+        <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
+          +{flashPoints}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function TodayPage() {
   const { profile, refreshProfile } = useAuth()
   const navigate = useNavigate()
@@ -399,31 +497,45 @@ export function TodayPage() {
       g.kind === 'checkbox' && !goalIdsWithTasks.has(g.id) && !scheduledGoalIds.has(g.id),
   )
 
+  // Goals that today splits into several tasks. Those tasks come out of the
+  // time-of-day lists and sit under their goal instead, so a goal the planner
+  // spread across the afternoon and "anytime" reads as one thing with parts
+  // rather than as unrelated rows in different sections.
+  const tasksByGoal = new Map<string, Task[]>()
+  for (const task of tasks) {
+    if (!task.goal_id) continue
+    const list = tasksByGoal.get(task.goal_id)
+    if (list) list.push(task)
+    else tasksByGoal.set(task.goal_id, [task])
+  }
+
+  const goalGroups = [...tasksByGoal.entries()]
+    .map(([goalId, items]) => ({ goal: goalsById.get(goalId), items }))
+    .filter(
+      (entry): entry is { goal: Goal; items: Task[] } =>
+        entry.goal?.kind === 'checkbox' && entry.items.length > 1,
+    )
+
+  const groupedTaskIds = new Set(goalGroups.flatMap((g) => g.items.map((t) => t.id)))
+
   const grouped = TIME_ORDER.map((tod) => ({
     tod,
-    items: tasks.filter((t) => t.time_of_day === tod),
+    items: tasks.filter((t) => t.time_of_day === tod && !groupedTaskIds.has(t.id)),
   })).filter((g) => g.items.length > 0)
 
-  // One number for the whole day: tasks, counters and standalone goals all
-  // count as one thing each, so the ring means "how much of today is done"
-  // rather than "how many of one particular kind of row".
-  const dayTotal = tasks.length + counterGoals.length + standaloneGoals.length
+  // One number for the whole day. A goal with several tasks counts as ONE
+  // thing, not as its parts, so the ring matches what the screen shows.
+  const dayTotal =
+    tasks.length - groupedTaskIds.size +
+    goalGroups.length +
+    counterGoals.length +
+    standaloneGoals.length
   const dayDone =
-    tasks.filter((t) => t.done).length +
+    tasks.filter((t) => t.done && !groupedTaskIds.has(t.id)).length +
+    goalGroups.filter((g) => g.items.every((t) => t.done)).length +
     counterGoals.filter((g) => goalLogs.get(g.id)?.completed).length +
     standaloneGoals.filter((g) => goalLogs.get(g.id)?.completed).length
   const dayFraction = dayTotal === 0 ? 0 : dayDone / dayTotal
-
-  // Goals the planner split into several tasks for today. Shown only when
-  // there's more than one, because that's exactly the case where "the goal
-  // is done" isn't obvious from ticking a single row.
-  const goalProgress = [...new Set(tasks.map((t) => t.goal_id).filter(Boolean))]
-    .map((goalId) => {
-      const goal = goalsById.get(goalId as string)
-      const items = tasks.filter((t) => t.goal_id === goalId)
-      return { goal, done: items.filter((t) => t.done).length, total: items.length }
-    })
-    .filter((entry) => entry.goal?.kind === 'checkbox' && entry.total > 1)
 
   const hasNothing = dayTotal === 0
 
@@ -690,120 +802,87 @@ export function TodayPage() {
         </div>
       )}
 
-      {goalProgress.length > 0 && (
-        <div className="-mx-4 mt-6 overflow-x-auto px-4">
-          <div className="flex w-max gap-2">
-            {goalProgress.map(({ goal, done, total }) => {
-              const complete = done === total
-              return (
-                <div
-                  key={goal!.id}
-                  className="flex items-center gap-2 rounded-full border px-3 py-2"
-                  style={{
-                    borderColor: complete ? goal!.color : 'var(--color-border)',
-                    backgroundColor: complete
-                      ? `${goal!.color}1f`
-                      : 'var(--color-surface)',
-                  }}
-                >
-                  <span className="text-base">{goal!.emoji}</span>
-                  <span className="text-sm text-ink">{goal!.title}</span>
-                  <span
-                    className="text-xs font-medium"
-                    style={{ color: complete ? goal!.color : 'var(--color-ink-dim)' }}
-                  >
-                    {complete ? '✓ done' : `${done}/${total}`}
-                  </span>
-                </div>
-              )
-            })}
+      {/* A goal that today splits into several tasks gets its own row with
+          the tasks nested under it. The goal's own checkbox is derived, not
+          tappable: it ticks itself the moment the last task under it is
+          done, which is the whole point. */}
+      {goalGroups.map(({ goal, items }) => {
+        const doneCount = items.filter((t) => t.done).length
+        const complete = doneCount === items.length
+        return (
+          <div key={goal.id} className="mt-6">
+            <div
+              className="flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-colors"
+              style={{
+                borderColor: complete ? goal.color : 'var(--color-border)',
+                backgroundColor: complete ? `${goal.color}14` : 'var(--color-surface)',
+              }}
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-bg"
+                style={{
+                  borderColor: complete ? goal.color : 'var(--color-border)',
+                  backgroundColor: complete ? goal.color : 'transparent',
+                }}
+              >
+                <AnimatedCheck done={complete} celebrating={false} />
+              </span>
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
+                style={{ backgroundColor: `${goal.color}26` }}
+              >
+                {goal.emoji}
+              </span>
+              <span className={`flex-1 font-medium ${complete ? 'text-ink-dim' : 'text-ink'}`}>
+                <span className={`strike-wrap ${complete ? 'is-struck' : ''}`}>{goal.title}</span>
+              </span>
+              <span
+                className="tabular shrink-0 text-sm font-medium"
+                style={{ color: complete ? goal.color : 'var(--color-ink-dim)' }}
+              >
+                {doneCount}/{items.length}
+              </span>
+            </div>
+
+            {/* Indented and hung off a rule so the nesting is obvious. */}
+            <div
+              className="mt-2 space-y-2 border-l pl-3"
+              style={{ borderColor: `${goal.color}40`, marginLeft: '1.25rem' }}
+            >
+              {items.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  celebrating={celebrating === task.id}
+                  flashPoints={flash?.id === task.id ? flash.points : null}
+                  expanded={expandedTask === task.id}
+                  onToggle={() => void toggleTask(task)}
+                  onToggleNotes={() =>
+                    setExpandedTask((prev) => (prev === task.id ? null : task.id))
+                  }
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })}
 
       {grouped.map((group) => (
         <div key={group.tod} className="mt-6">
           <h2 className="text-sm font-medium text-ink-dim">{timeOfDayLabel(group.tod)}</h2>
           <div className="mt-2 space-y-2">
-            {group.items.map((task) => {
-              const taskGoal = task.goal_id ? goalsById.get(task.goal_id) : undefined
-              return (
-              <div key={task.id} className="relative">
-                <button
-                  type="button"
-                  onClick={() => void toggleTask(task)}
-                  className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors ${
-                    task.done ? 'border-mine/30 bg-mine/10' : 'border-border bg-surface'
-                  }`}
-                >
-                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
-                    {celebrating === task.id && (
-                      <span className="animate-ring-burst absolute inset-0 rounded-full border-2 border-mine" />
-                    )}
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-bg ${
-                        task.done ? 'border-mine bg-mine' : 'border-border'
-                      } ${celebrating === task.id ? 'animate-check-bounce' : ''}`}
-                    >
-                      <AnimatedCheck done={task.done} celebrating={celebrating === task.id} />
-                    </span>
-                  </span>
-                  {taskGoal && (
-                    <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
-                      style={{ backgroundColor: `${taskGoal.color}26` }}
-                    >
-                      {taskGoal.emoji}
-                    </span>
-                  )}
-                  <span
-                    className={`flex-1 transition-colors duration-300 ${task.done ? 'text-ink-dim' : 'text-ink'}`}
-                  >
-                    <span
-                      className={`strike-wrap ${task.done ? 'is-struck' : ''} ${
-                        celebrating === task.id ? 'is-animating' : ''
-                      }`}
-                    >
-                      {task.title}
-                    </span>
-                  </span>
-                  {task.notes && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Show details"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setExpandedTask((prev) => (prev === task.id ? null : task.id))
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setExpandedTask((prev) => (prev === task.id ? null : task.id))
-                        }
-                      }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-dim"
-                    >
-                      {expandedTask === task.id ? '▴' : '▾'}
-                    </span>
-                  )}
-                  {celebrating === task.id && <Confetti />}
-                </button>
-
-                {task.notes && expandedTask === task.id && (
-                  <p className="mt-1 whitespace-pre-line rounded-xl border border-border bg-surface-raised px-3 py-2 text-sm text-ink-dim">
-                    {task.notes}
-                  </p>
-                )}
-                {flash?.id === task.id && (
-                  <span className="pointer-events-none absolute -top-2 right-2 animate-bounce text-sm font-semibold text-mine">
-                    +{flash.points}
-                  </span>
-                )}
-              </div>
-              )
-            })}
+            {group.items.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                goal={task.goal_id ? goalsById.get(task.goal_id) : undefined}
+                celebrating={celebrating === task.id}
+                flashPoints={flash?.id === task.id ? flash.points : null}
+                expanded={expandedTask === task.id}
+                onToggle={() => void toggleTask(task)}
+                onToggleNotes={() => setExpandedTask((prev) => (prev === task.id ? null : task.id))}
+              />
+            ))}
           </div>
         </div>
       ))}

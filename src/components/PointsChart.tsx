@@ -39,27 +39,41 @@ export function PointsChart({
   labels,
   series,
   fullLabels,
+  zeroBased = true,
 }: {
   labels: string[]
   series: ChartSeries[]
   /** Longer labels used in the scrub readout, e.g. "Mar 4". */
   fullLabels?: string[]
+  /**
+   * Anchor the axis at zero. Right for daily points. Wrong for a running
+   * lifetime total, where every value sits near the same large number and a
+   * zero floor squashes the whole climb into a flat line.
+   */
+  zeroBased?: boolean
 }) {
   const gradId = useId()
   const svgRef = useRef<SVGSVGElement>(null)
   const [active, setActive] = useState<number | null>(null)
 
-  const max = useMemo(() => {
+  const { min, max } = useMemo(() => {
     const all = series.flatMap((s) => s.values)
-    return Math.max(10, ...all)
-  }, [series])
+    if (all.length === 0) return { min: 0, max: 10 }
+    const hi = Math.max(...all)
+    if (zeroBased) return { min: 0, max: Math.max(10, hi) }
+    const lo = Math.min(...all)
+    // Pad the floor so the lowest point isn't welded to the axis line.
+    const span = Math.max(1, hi - lo)
+    return { min: Math.max(0, lo - span * 0.15), max: Math.max(hi, lo + 1) }
+  }, [series, zeroBased])
 
   const n = labels.length
   const innerW = W - PAD_X * 2
   const innerH = H - PAD_TOP - PAD_BOTTOM
+  const range = Math.max(1, max - min)
 
   const xFor = (i: number) => PAD_X + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-  const yFor = (v: number) => PAD_TOP + innerH - (v / max) * innerH
+  const yFor = (v: number) => PAD_TOP + innerH - ((v - min) / range) * innerH
 
   const toPoints = (values: number[]) => values.map((v, i) => ({ x: xFor(i), y: yFor(v) }))
 
@@ -180,8 +194,15 @@ export function PointsChart({
         )}
 
         <text x={PAD_X} y={PAD_TOP - 3} fontSize="8" fill="var(--color-ink-dim)">
-          {max}
+          {Math.round(max)}
         </text>
+        {/* Only worth printing when the axis doesn't start at zero, otherwise
+            it's a label saying "0" for no reason. */}
+        {min > 0 && (
+          <text x={PAD_X} y={PAD_TOP + innerH + 8} fontSize="8" fill="var(--color-ink-dim)">
+            {Math.round(min)}
+          </text>
+        )}
       </svg>
 
       {/* Readout sits below the chart rather than floating over it, so it

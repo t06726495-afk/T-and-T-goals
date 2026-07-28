@@ -48,7 +48,9 @@ export function PointsPage() {
   const { profile, refreshProfile } = useAuth()
   const [partner, setPartner] = useState<Profile | null>(null)
   const [days, setDays] = useState(30)
-  const [mode, setMode] = useState<'daily' | 'total'>('daily')
+  // Total is the default: a line that only climbs is the one that reads as
+  // progress. Daily is still there for "how was Tuesday".
+  const [mode, setMode] = useState<'daily' | 'total'>('total')
   const [myHistory, setMyHistory] = useState<DayPoints[]>([])
   const [partnerHistory, setPartnerHistory] = useState<DayPoints[]>([])
   const [mySummary, setMySummary] = useState<PointsSummary>(EMPTY_SUMMARY)
@@ -327,7 +329,12 @@ export function PointsPage() {
         </div>
 
         <div className="mt-2">
-          <PointsChart labels={labels} fullLabels={fullLabels} series={series} />
+          <PointsChart
+            labels={labels}
+            fullLabels={fullLabels}
+            series={series}
+            zeroBased={mode === 'daily'}
+          />
         </div>
 
         <div className="mt-2 flex items-center justify-center gap-4 text-xs text-ink-dim">
