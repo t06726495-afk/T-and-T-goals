@@ -33,14 +33,22 @@ function describeAuthError(error: AuthError): FriendlyError {
   }
 
   // A signup blocked by the invite-list trigger surfaces as a database error,
-  // because the trigger fires while the account row is being created. It is
-  // by far the most likely reason a brand new email fails here.
-  if (lower.includes('database error') || isUnusable(raw)) {
+  // because the trigger fires while the account row is being created.
+  if (lower.includes('database error')) {
     return {
       message:
-        "Couldn't start sign-in for this email. If this is your first time here, " +
-        'it may not be on the invite list yet.',
-      detail: isUnusable(raw) ? `Status ${error.status ?? 'unknown'}` : raw,
+        "Couldn't create an account for this email. It may not be on the invite list yet.",
+      detail: raw,
+    }
+  }
+
+  // No message at all. Do NOT guess a cause: a failed email send and a
+  // rejected signup both land here, and naming the wrong one sends whoever is
+  // debugging this off in the wrong direction for an hour.
+  if (isUnusable(raw)) {
+    return {
+      message: 'Something went wrong on the server. Try again in a moment.',
+      detail: `No error detail returned (status ${error.status ?? 'unknown'}). Check the Auth logs in Supabase.`,
     }
   }
 
