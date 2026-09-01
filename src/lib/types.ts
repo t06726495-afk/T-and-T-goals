@@ -115,3 +115,46 @@ export interface BenchmarkEntry {
   note: string | null
   created_at: string
 }
+
+export type SharedValueFormat = 'number' | 'money'
+
+export interface SharedGoal {
+  id: string
+  couple_id: string
+  created_by: string
+  title: string
+  emoji: string
+  color: string
+  target_value: number
+  unit: string | null
+  value_format: SharedValueFormat
+  difficulty: Difficulty
+  is_active: boolean
+  achieved_at: string | null
+  created_at: string
+  archived_at: string | null
+}
+
+export interface SharedGoalEntry {
+  id: string
+  shared_goal_id: string
+  owner_id: string
+  amount: number
+  note: string | null
+  recorded_on: string
+  is_bonus: boolean
+  points_awarded: number
+  created_at: string
+}
+
+export interface JournalEntry {
+  id: string
+  owner_id: string
+  entry_date: string
+  body: string | null
+  mood: number | null
+  visibility: Visibility
+  points_awarded: number
+  created_at: string
+  updated_at: string
+}

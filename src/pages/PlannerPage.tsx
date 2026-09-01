@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { DIFFICULTY_OPTIONS } from '../lib/pickers'
@@ -188,7 +188,10 @@ export function PlannerPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-3xl font-semibold text-ink">Planner</h1>
+      <Link to="/goals" className="text-sm text-ink-dim">
+        ← Goals
+      </Link>
+      <h1 className="mt-2 text-3xl font-semibold text-ink">Planner</h1>
       <p className="mt-1 text-sm text-ink-dim">
         Answer a few questions and get a weekly plan you can edit before saving.
       </p>

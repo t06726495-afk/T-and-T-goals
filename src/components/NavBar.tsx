@@ -1,26 +1,20 @@
 import { NavLink } from 'react-router-dom'
-import {
-  ChartLineUp,
-  GearSix,
-  Heart,
-  House,
-  Sparkle,
-  Target,
-  type Icon,
-} from '@phosphor-icons/react'
+import { ChartLineUp, House, Target, type Icon } from '@phosphor-icons/react'
 
-// Bottom tab bar rather than a top one: on a phone the top of the screen is
-// the hardest place to reach with a thumb, and this is an app you open
-// several times a day one-handed. The active tab switches to the filled icon
-// weight, which is how you tell state apart at 22px without relying on
-// colour alone.
+// Three tabs, down from six. Planner and Partner were destinations you visit
+// once a week sitting beside ones you open several times a day, which made
+// the app look busier than it is. The planner is now a button on Goals, where
+// you already are when you want a plan; the partner's side of things sits
+// next to your own on Today and Goals rather than in a separate room.
+// Settings is a gear in the header.
+//
+// Bottom bar rather than top: on a phone the top of the screen is the hardest
+// place to reach one-handed. The active tab switches to the filled icon
+// weight, so state doesn't depend on colour alone.
 const SECTIONS: { to: string; label: string; icon: Icon }[] = [
   { to: '/', label: 'Today', icon: House },
   { to: '/goals', label: 'Goals', icon: Target },
-  { to: '/partner', label: 'Partner', icon: Heart },
   { to: '/points', label: 'Points', icon: ChartLineUp },
-  { to: '/planner', label: 'Planner', icon: Sparkle },
-  { to: '/settings', label: 'Settings', icon: GearSix },
 ]
 
 export function NavBar() {
@@ -42,12 +36,12 @@ export function NavBar() {
             {({ isActive }) => (
               <>
                 <IconComponent
-                  size={23}
+                  size={25}
                   weight={isActive ? 'fill' : 'regular'}
                   className={isActive ? 'text-mine' : 'text-ink-dim'}
                 />
                 <span
-                  className={`text-[10px] leading-none ${
+                  className={`text-[11px] leading-none ${
                     isActive ? 'font-semibold text-mine' : 'font-medium text-ink-dim'
                   }`}
                 >

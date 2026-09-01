@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Sparkle } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { todayInTimezone } from '../lib/date'
@@ -7,8 +9,20 @@ import { GoalFormSheet } from '../components/GoalFormSheet'
 import { YearGridModal } from '../components/YearGridModal'
 import { BenchmarkFormSheet } from '../components/BenchmarkFormSheet'
 import { BenchmarkDetailModal } from '../components/BenchmarkDetailModal'
+import { SharedGoalCard } from '../components/SharedGoalCard'
+import { SharedGoalFormSheet } from '../components/SharedGoalFormSheet'
+import { PageHeader } from '../components/PageHeader'
 import { benchmarkProgress, formatValue, isAchieved, remainingLabel } from '../lib/benchmarks'
-import type { Benchmark, Goal, GoalLog, Profile } from '../lib/types'
+import type {
+  Benchmark,
+  Goal,
+  GoalLog,
+  Profile,
+  SharedGoal,
+  SharedGoalEntry,
+} from '../lib/types'
+
+type Tab = 'mine' | 'ours' | 'theirs'
 
 const STREAK_LOOKBACK_DAYS = 60
 
@@ -25,6 +39,11 @@ export function GoalsPage() {
   const [viewingGoal, setViewingGoal] = useState<Goal | null>(null)
   const [editingBenchmark, setEditingBenchmark] = useState<Benchmark | 'new' | null>(null)
   const [viewingBenchmark, setViewingBenchmark] = useState<Benchmark | null>(null)
+  const [tab, setTab] = useState<Tab>('mine')
+  const [sharedGoals, setSharedGoals] = useState<SharedGoal[]>([])
+  const [sharedEntries, setSharedEntries] = useState<SharedGoalEntry[]>([])
+  const [editingShared, setEditingShared] = useState<SharedGoal | 'new' | null>(null)
+  const navigate = useNavigate()
 
   const today = profile ? todayInTimezone(profile.timezone) : new Date().toISOString().slice(0, 10)
 
@@ -91,6 +110,29 @@ export function GoalsPage() {
     setMyBenchmarks(allBenchmarks.filter((b) => b.owner_id === profile.id))
     setPartnerBenchmarks(allBenchmarks.filter((b) => b.owner_id !== profile.id))
 
+    // Shared goals belong to the couple, so RLS scopes these to your pairing
+    // without needing a filter here.
+    const { data: sharedRows } = await supabase
+      .from('shared_goals')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+    const shared = (sharedRows as SharedGoal[]) ?? []
+    setSharedGoals(shared)
+
+    if (shared.length > 0) {
+      const { data: entryRows } = await supabase
+        .from('shared_goal_entries')
+        .select('*')
+        .in(
+          'shared_goal_id',
+          shared.map((g) => g.id),
+        )
+      setSharedEntries((entryRows as SharedGoalEntry[]) ?? [])
+    } else {
+      setSharedEntries([])
+    }
+
     setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
@@ -103,134 +145,199 @@ export function GoalsPage() {
     return <div className="mx-auto max-w-2xl px-4 py-6 text-ink-dim">Loading…</div>
   }
 
+  const partnerName = partner?.display_name ?? 'Her'
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-semibold text-ink">Goals</h1>
-          {/* Today is where you tick things off. This screen is for setting
-              them up and seeing how they've gone. */}
-          <p className="mt-1 text-sm text-ink-dim">Set them up here, tick them off on Today.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditingGoal('new')}
-          className="min-h-11 shrink-0 rounded-full bg-mine px-4 py-2 font-medium text-bg transition-transform active:scale-95"
-        >
-          + Add goal
-        </button>
+      <PageHeader title="Goals" subtitle="Set them up here, tick them off on Today." />
+
+      {/* Three focused views instead of one long scroll with four headings.
+          Your habits, the things you're doing together, and hers were all
+          stacked on one page; only one of them is ever what you came for. */}
+      <div className="mt-4 flex gap-1 rounded-full border border-border p-1">
+        {([
+          { id: 'mine' as Tab, label: 'Mine' },
+          { id: 'ours' as Tab, label: 'Ours' },
+          { id: 'theirs' as Tab, label: partnerName },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`min-h-10 flex-1 truncate rounded-full px-3 text-sm font-medium transition-colors ${
+              tab === t.id ? 'bg-mine text-bg' : 'text-ink-dim'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {loading ? (
-        <p className="mt-6 text-ink-dim">Loading…</p>
-      ) : myGoals.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-border bg-surface p-6 text-center">
-          <p className="text-ink">No goals yet</p>
-          <p className="mt-1 text-sm text-ink-dim">
-            Add your first one: a daily habit, a counter like glasses of
-            water, whatever you want to build.
-          </p>
-          <button
-            type="button"
-            onClick={() => setEditingGoal('new')}
-            className="mt-4 min-h-11 rounded-xl bg-mine px-4 py-2 font-medium text-bg"
-          >
-            + Add goal
-          </button>
-        </div>
-      ) : (
-        <div className="mt-6 space-y-3">
-          {myGoals.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              today={today}
-              logs={logsByGoal.get(goal.id)}
-              onClick={() => setViewingGoal(goal)}
-              onEdit={() => setEditingGoal(goal)}
+      {loading && <p className="mt-6 text-ink-dim">Loading…</p>}
+
+      {!loading && tab === 'mine' && (
+        <>
+          <SectionHeading
+            title="Daily habits"
+            hint="The things you do, tracked day by day."
+            actionLabel="+ Add"
+            onAction={() => setEditingGoal('new')}
+          />
+
+          {myGoals.length === 0 ? (
+            <EmptyCard
+              title="No habits yet"
+              body="Add your first one: a daily habit, a counter like glasses of water, whatever you want to build."
+              actionLabel="+ Add habit"
+              onAction={() => setEditingGoal('new')}
             />
-          ))}
-        </div>
-      )}
-
-      {partnerGoals.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-medium text-ink-dim">
-            {partner?.display_name ?? 'Her'}'s shared goals
-          </h2>
-          <div className="mt-3 space-y-3">
-            {partnerGoals.map((goal) => (
-              <GoalCard
-                key={goal.id}
-                goal={goal}
-                today={today}
-                logs={logsByGoal.get(goal.id)}
-                readOnly
-                onClick={() => setViewingGoal(goal)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Benchmarks — the numbers you're working toward, as opposed to the
-          daily habits above that move them. */}
-      <div className="mt-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-ink">Benchmarks</h2>
-            <p className="text-xs text-ink-dim">Targets to hit, not daily habits.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setEditingBenchmark('new')}
-            className="min-h-11 rounded-full border border-mine px-4 py-2 text-sm font-medium text-mine"
-          >
-            + Add
-          </button>
-        </div>
-
-        {myBenchmarks.length === 0 ? (
-          <div className="mt-3 rounded-2xl border border-dashed border-border p-5 text-center">
-            <p className="text-sm text-ink">Nothing to chase yet</p>
-            <p className="mt-1 text-xs text-ink-dim">
-              Set a target like a sub-7:30 mile, a 225 bench, or a goal weight, and
-              log results as you go.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {myBenchmarks.map((b) => (
-              <BenchmarkCard
-                key={b.id}
-                benchmark={b}
-                goals={myGoals}
-                onClick={() => setViewingBenchmark(b)}
-                onEdit={() => setEditingBenchmark(b)}
-              />
-            ))}
-          </div>
-        )}
-
-        {partnerBenchmarks.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-ink-dim">
-              {partner?.display_name ?? 'Her'}'s shared benchmarks
-            </h3>
+          ) : (
             <div className="mt-3 space-y-3">
-              {partnerBenchmarks.map((b) => (
-                <BenchmarkCard
-                  key={b.id}
-                  benchmark={b}
-                  goals={partnerGoals}
-                  readOnly
-                  onClick={() => setViewingBenchmark(b)}
+              {myGoals.map((goal) => (
+                <GoalCard
+                  key={goal.id}
+                  goal={goal}
+                  today={today}
+                  logs={logsByGoal.get(goal.id)}
+                  onClick={() => setViewingGoal(goal)}
+                  onEdit={() => setEditingGoal(goal)}
                 />
               ))}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* The planner stopped being a tab. This is where you are when you
+              want one, so this is where the button belongs. */}
+          <button
+            type="button"
+            onClick={() => navigate('/planner')}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-mine/50 text-sm font-medium text-mine"
+          >
+            <Sparkle size={18} weight="fill" />
+            Build me a plan
+          </button>
+
+          <SectionHeading
+            title="Targets"
+            hint="A number you're working toward, like a goal weight."
+            actionLabel="+ Add"
+            onAction={() => setEditingBenchmark('new')}
+          />
+
+          {myBenchmarks.length === 0 ? (
+            <EmptyCard
+              title="Nothing to chase yet"
+              body="Set a target like a goal weight, a sub-7:30 mile, or a 225 bench, and log results as you go."
+              actionLabel="+ Add target"
+              onAction={() => setEditingBenchmark('new')}
+            />
+          ) : (
+            <div className="mt-3 space-y-3">
+              {myBenchmarks.map((b) => (
+                <BenchmarkCard
+                  key={b.id}
+                  benchmark={b}
+                  goals={myGoals}
+                  onClick={() => setViewingBenchmark(b)}
+                  onEdit={() => setEditingBenchmark(b)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && tab === 'ours' && (
+        <>
+          <SectionHeading
+            title="Together"
+            hint="One target you both put into."
+            actionLabel="+ Add"
+            onAction={() => setEditingShared('new')}
+          />
+
+          {sharedGoals.length === 0 ? (
+            <EmptyCard
+              title="Nothing shared yet"
+              body="Something you're both working on, like saving for a trip or twelve date nights this year. You each log what you add and it fills up together."
+              actionLabel="+ Add shared goal"
+              onAction={() => setEditingShared('new')}
+            />
+          ) : (
+            <div className="mt-3 space-y-3">
+              {sharedGoals.map((g) => (
+                <SharedGoalCard
+                  key={g.id}
+                  goal={g}
+                  entries={sharedEntries.filter((e) => e.shared_goal_id === g.id)}
+                  partner={partner}
+                  onChanged={() => void load()}
+                  onEdit={() => setEditingShared(g)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && tab === 'theirs' && (
+        <>
+          {partnerGoals.length === 0 && partnerBenchmarks.length === 0 ? (
+            <EmptyCard
+              title={`Nothing from ${partnerName} yet`}
+              body="Only what she marks as shared shows up here. Anything private stays private."
+            />
+          ) : (
+            <>
+              {partnerGoals.length > 0 && (
+                <>
+                  <SectionHeading title="Daily habits" />
+                  <div className="mt-3 space-y-3">
+                    {partnerGoals.map((goal) => (
+                      <GoalCard
+                        key={goal.id}
+                        goal={goal}
+                        today={today}
+                        logs={logsByGoal.get(goal.id)}
+                        readOnly
+                        onClick={() => setViewingGoal(goal)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {partnerBenchmarks.length > 0 && (
+                <>
+                  <SectionHeading title="Targets" />
+                  <div className="mt-3 space-y-3">
+                    {partnerBenchmarks.map((b) => (
+                      <BenchmarkCard
+                        key={b.id}
+                        benchmark={b}
+                        goals={partnerGoals}
+                        readOnly
+                        onClick={() => setViewingBenchmark(b)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {editingShared && (
+        <SharedGoalFormSheet
+          goal={editingShared === 'new' ? undefined : editingShared}
+          onClose={() => setEditingShared(null)}
+          onSaved={() => {
+            setEditingShared(null)
+            void load()
+          }}
+        />
+      )}
 
       {editingGoal && (
         <GoalFormSheet
@@ -276,6 +383,64 @@ export function GoalsPage() {
           }}
           onChanged={() => void load()}
         />
+      )}
+    </div>
+  )
+}
+
+function SectionHeading({
+  title,
+  hint,
+  actionLabel,
+  onAction,
+}: {
+  title: string
+  hint?: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="mt-7 flex items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="font-semibold text-ink">{title}</h2>
+        {hint && <p className="text-xs text-ink-dim">{hint}</p>}
+      </div>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="min-h-10 shrink-0 rounded-full border border-mine px-4 text-sm font-medium text-mine transition-transform active:scale-95"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function EmptyCard({
+  title,
+  body,
+  actionLabel,
+  onAction,
+}: {
+  title: string
+  body: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="mt-3 rounded-2xl border border-dashed border-border p-6 text-center">
+      <p className="text-sm font-medium text-ink">{title}</p>
+      <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-ink-dim">{body}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-4 min-h-11 rounded-xl bg-mine px-4 py-2 text-sm font-medium text-bg"
+        >
+          {actionLabel}
+        </button>
       )}
     </div>
   )

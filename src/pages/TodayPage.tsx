@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { GearSix } from '@phosphor-icons/react'
+import { JournalCard } from '../components/JournalCard'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ensureTodaysTasks } from '../lib/recurrence'
@@ -639,6 +641,16 @@ export function TodayPage() {
           </p>
         </div>
 
+        {/* Settings lost its tab, so it lives here. Sitting beside the ring
+            keeps it out of the way without hiding it. */}
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          className="mb-6 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-dim transition-transform active:scale-90"
+        >
+          <GearSix size={22} />
+        </Link>
+
         {/* One focal point for the screen. The ring is the day; the level chip
             underneath is the long game. */}
         <button
@@ -666,6 +678,9 @@ export function TodayPage() {
         </button>
       </div>
 
+      {/* Days together folded into the partner row rather than sitting in its
+          own card, and the quote is now plain text. Two fewer boxes before you
+          reach anything you can actually do. */}
       {partner && (
         <div className="mt-4 flex items-center gap-2 rounded-2xl border border-partner/20 bg-surface p-3">
           <button
@@ -676,10 +691,16 @@ export function TodayPage() {
             <span className="text-xl">{partner.avatar_emoji}</span>
             <p className="min-w-0 flex-1 truncate text-sm text-ink">
               <span className="font-medium">{partner.display_name}</span>
+              {togetherSince && (
+                <span className="text-ink-dim">
+                  {' '}
+                  · <span className="tabular">{daysTogether(togetherSince, today)}</span> days
+                </span>
+              )}
               {partnerTotal > 0 && (
                 <span className="text-ink-dim">
                   {' '}
-                  · {partnerDone}/{partnerTotal} shared goals today
+                  · {partnerDone}/{partnerTotal} today
                 </span>
               )}
             </p>
@@ -699,22 +720,9 @@ export function TodayPage() {
         <NudgeComposer partner={partner} onClose={() => setNudging(false)} />
       )}
 
-      {/* Days together + a quote that rotates once a day (deterministic on
-          the date, so you both see the same one). */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-surface">
-        {togetherSince && (
-          <div className="flex items-center justify-center gap-2 border-b border-border bg-partner/10 px-4 py-2.5">
-            <span className="text-sm">💞</span>
-            <p className="text-sm text-ink">
-              <span className="font-semibold">{daysTogether(togetherSince, today)}</span>
-              <span className="text-ink-dim"> days together</span>
-            </p>
-          </div>
-        )}
-        <p className="px-4 py-3 text-center text-sm italic leading-relaxed text-ink-dim">
-          {quoteForDate(today)}
-        </p>
-      </div>
+      <p className="mt-4 px-2 text-center text-sm italic leading-relaxed text-ink-dim">
+        {quoteForDate(today)}
+      </p>
 
       {counterGoals.length > 0 && (
         <div className="mt-6 space-y-2">
@@ -953,6 +961,10 @@ export function TodayPage() {
           </div>
         </div>
       ))}
+
+      {/* Last, deliberately. The day's work comes first; reflecting on it is
+          what you do once you've scrolled past the doing. */}
+      {today && <JournalCard today={today} partner={partner} onSaved={() => void refreshProfile()} />}
 
       {hasNothing && (
         <div className="mt-6 rounded-2xl border border-border bg-surface p-6 text-center">

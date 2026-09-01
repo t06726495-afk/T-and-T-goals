@@ -436,3 +436,15 @@ worker generator, which we don't run in the browser) or in a React Router
 mode we don't use (server-side rendering). None of them affect the deployed
 app, but it's worth running `npm audit` again occasionally and upgrading
 when fixes land.
+
+## 23. Run the shared goals and journal migration
+
+Adds goals you chase together (one target, both of you contributing) and the
+daily journal with its mood tracker.
+
+Supabase → **SQL Editor → New query** → paste
+`supabase/migrations/20260806000000_shared_goals_and_journal.sql` → **Run**.
+
+Journal entries default to being visible to your partner, with a toggle on
+each day's entry to make that one private. The setting is stored per entry
+from the start, so changing your mind later is a tap rather than a migration.

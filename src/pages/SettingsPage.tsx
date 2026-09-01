@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { CoupleInfo, Goal, Profile } from '../lib/types'
@@ -12,7 +13,12 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-3xl font-semibold text-ink">Settings</h1>
+      {/* Reached from the gear rather than a tab, so it needs its own way
+          back. */}
+      <Link to="/" className="text-sm text-ink-dim">
+        ← Today
+      </Link>
+      <h1 className="mt-2 text-3xl font-semibold text-ink">Settings</h1>
 
       {profile && <ProfileForm profile={profile} onSaved={refreshProfile} />}
 

@@ -15,6 +15,9 @@ export async function exportMyData(profileId: string) {
     benchmarkEntries,
     nudgesSent,
     nudgesReceived,
+    journal,
+    sharedContributions,
+    sharedGoals,
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', profileId).maybeSingle(),
     supabase.from('user_settings').select('*').eq('profile_id', profileId).maybeSingle(),
@@ -26,6 +29,12 @@ export async function exportMyData(profileId: string) {
     supabase.from('benchmark_entries').select('*').eq('owner_id', profileId),
     supabase.from('nudges').select('*').eq('from_id', profileId),
     supabase.from('nudges').select('*').eq('to_id', profileId),
+    supabase.from('journal_entries').select('*').eq('owner_id', profileId),
+    supabase.from('shared_goal_entries').select('*').eq('owner_id', profileId),
+    // The goals themselves belong to the couple rather than to you, so they
+    // come out unfiltered by owner. Included so the contributions above make
+    // sense on their own, rather than being a list of bare numbers.
+    supabase.from('shared_goals').select('*'),
   ])
 
   return {
@@ -41,6 +50,9 @@ export async function exportMyData(profileId: string) {
     benchmark_entries: benchmarkEntries.data ?? [],
     nudges_sent: nudgesSent.data ?? [],
     nudges_received: nudgesReceived.data ?? [],
+    journal_entries: journal.data ?? [],
+    shared_goals: sharedGoals.data ?? [],
+    shared_goal_contributions: sharedContributions.data ?? [],
   }
 }
 

@@ -13,6 +13,7 @@ import {
   type PointsSummary,
 } from '../lib/gamification'
 import { PointsChart, type ChartSeries } from '../components/PointsChart'
+import { PageHeader } from '../components/PageHeader'
 import { Confetti } from '../components/Confetti'
 import type { Profile } from '../lib/types'
 
@@ -205,8 +206,7 @@ export function PointsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-3xl font-semibold text-ink">Points</h1>
-      <p className="mt-1 text-sm text-ink-dim">How you're both doing.</p>
+      <PageHeader title="Points" subtitle="How you're both doing." />
 
       {leveledUpTo && (
         <div className="relative mt-4 overflow-hidden rounded-2xl border border-mine/40 bg-mine/10 p-4 text-center">
